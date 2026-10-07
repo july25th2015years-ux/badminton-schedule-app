@@ -115,9 +115,17 @@ function getLocalEvents(): PracticeEvent[] {
     return samples;
   }
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      const samples = getInitialSampleEvents();
+      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
+      return samples;
+    }
+    return parsed;
   } catch {
-    return [];
+    const samples = getInitialSampleEvents();
+    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
+    return samples;
   }
 }
 
@@ -130,6 +138,11 @@ function getLocalAttendances(): Attendance[] {
   }
   try {
     const list: Attendance[] = JSON.parse(raw);
+    if (!Array.isArray(list) || list.length === 0) {
+      const samples = getInitialSampleAttendances();
+      localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(samples));
+      return samples;
+    }
     // 既存データの正規化
     return list.map(a => ({
       ...a,
@@ -139,8 +152,18 @@ function getLocalAttendances(): Attendance[] {
       afternoonCondition: a.afternoonCondition || (a.status === 'triangle' ? a.condition : undefined),
     }));
   } catch {
-    return [];
+    const samples = getInitialSampleAttendances();
+    localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(samples));
+    return samples;
   }
+}
+
+export function resetToSampleData(): void {
+  const samples = getInitialSampleEvents();
+  localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
+  const attSamples = getInitialSampleAttendances();
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attSamples));
+  emitSync();
 }
 
 // カスタムイベントでローカル購読者に即時通知

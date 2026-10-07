@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { PracticeEvent, Attendance, SlotStatus } from '../types';
 import { formatDateJa, getEventAttendanceStats } from '../utils/helpers';
-import { MapPin, Clock, Sun, Moon, Sparkles, Check, AlertCircle, Save } from 'lucide-react';
-import { getStoredUserName, setStoredUserName, saveBulkAttendances } from '../services/storage';
+import { MapPin, Clock, Sun, Moon, Sparkles, Check, AlertCircle, Save, Plus, RefreshCw } from 'lucide-react';
+import { getStoredUserName, setStoredUserName, saveBulkAttendances, resetToSampleData } from '../services/storage';
 
 interface MatrixViewProps {
   year: number;
@@ -10,6 +10,7 @@ interface MatrixViewProps {
   events: PracticeEvent[];
   attendances: Attendance[];
   onSelectEvent: (event: PracticeEvent) => void;
+  onOpenAddModal: () => void;
 }
 
 interface DraftSlot {
@@ -25,6 +26,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   events,
   attendances,
   onSelectEvent,
+  onOpenAddModal,
 }) => {
   // 当月の日程のみ抽出
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -186,11 +188,34 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
   if (monthEvents.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center text-slate-400">
-        <p className="text-sm">この月にはまだ練習日が登録されていません。</p>
-        <p className="text-xs mt-1 text-slate-400">
-          右上の「練習日を追加」ボタンから日程を登録してください🏸
-        </p>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-10 text-center space-y-4">
+        <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-2xs">
+          🏸
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-slate-800">
+            {year}年{month}月の練習日（候補日）がまだ登録されていません
+          </h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            練習日を追加すると、ここに午前・午後の「ポチポチ出欠一括入力」フォームと、メンバー全員の出欠一覧表が表示されます。
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+          <button
+            onClick={onOpenAddModal}
+            className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-sm transition active:scale-98"
+          >
+            <Plus className="w-4 h-4" />
+            <span>この月に練習日を追加する</span>
+          </button>
+          <button
+            onClick={() => resetToSampleData()}
+            className="w-full sm:w-auto inline-flex items-center justify-center space-x-1.5 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>サンプル日程（スポーツパーク川副）をセット</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -209,14 +234,24 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleSelectAllFullDay}
-            className="inline-flex items-center space-x-1 text-xs bg-white/20 hover:bg-white/30 text-white font-semibold px-2.5 py-1 rounded-lg transition self-start sm:self-auto"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>すべて終日◯にする</span>
-          </button>
+          <div className="flex items-center space-x-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="inline-flex items-center space-x-1 text-xs bg-white text-emerald-900 hover:bg-emerald-50 font-bold px-2.5 py-1 rounded-lg transition shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>練習日を追加</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSelectAllFullDay}
+              className="inline-flex items-center space-x-1 text-xs bg-white/20 hover:bg-white/30 text-white font-semibold px-2.5 py-1 rounded-lg transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>すべて終日◯</span>
+            </button>
+          </div>
         </div>
 
         <div className="p-4 space-y-3">

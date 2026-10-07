@@ -145,6 +145,7 @@ export const App: React.FC = () => {
             events={events}
             attendances={attendances}
             onSelectEvent={(event) => setSelectedEventId(event.id)}
+            onOpenAddModal={() => handleOpenAddModal()}
           />
         )}
       </main>
