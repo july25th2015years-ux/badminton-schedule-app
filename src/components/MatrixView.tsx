@@ -791,8 +791,9 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 const stats = getDateAttendanceStats(day.date, events, attendances);
                 const dayEvent = events.find(e => e.date === day.date);
                 const isMax = maxAttendanceCount > 0 && stats.totalAttendeesCount === maxAttendanceCount;
+                const isPast = day.date < todayStr;
                 const yosshyCheck = checkIsYosshyAndTwoOthers(day.date);
-                const isYosshyAndTwoOthers = yosshyCheck.isMatch;
+                const isYosshyAndTwoOthers = !isPast && yosshyCheck.isMatch;
 
                 let rowBg = 'hover:bg-slate-50/80';
                 let stickyColBg = 'bg-white group-hover:bg-slate-50';
@@ -800,7 +801,14 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 let afternoonColBg = 'bg-teal-50/20';
                 let totalColBg = 'bg-emerald-50/30';
 
-                if (isYosshyAndTwoOthers) {
+                if (isPast) {
+                  // 過去の日程はグレーアウトして入力・選択不可の見た目に
+                  rowBg = 'bg-slate-100/70 text-slate-400';
+                  stickyColBg = 'bg-slate-100/90 group-hover:bg-slate-200/60';
+                  morningColBg = 'bg-slate-100/50 text-slate-400';
+                  afternoonColBg = 'bg-slate-100/50 text-slate-400';
+                  totalColBg = 'bg-slate-200/50 text-slate-400';
+                } else if (isYosshyAndTwoOthers) {
                   // 午前または午後の同一時間帯でヨッシー＋他2名以上が参加できる日を黄色で背景をぬる
                   rowBg = 'bg-yellow-100/90 hover:bg-yellow-200/90 font-medium';
                   stickyColBg = 'bg-yellow-100 group-hover:bg-yellow-200';
@@ -816,8 +824,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 }
 
                 let dayTextColor = 'text-slate-800';
-                if (day.isSunday) dayTextColor = 'text-rose-600 font-bold';
-                else if (day.isSaturday) dayTextColor = 'text-sky-600 font-bold';
+                if (isPast) {
+                  dayTextColor = 'text-slate-400 font-normal';
+                } else if (day.isSunday) {
+                  dayTextColor = 'text-rose-600 font-bold';
+                } else if (day.isSaturday) {
+                  dayTextColor = 'text-sky-600 font-bold';
+                }
 
                 return (
                   <tr key={day.date} className={`${rowBg} transition group`}>
@@ -827,6 +840,11 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                         <span className={`text-xs ${dayTextColor}`}>
                           {day.dayNumber}日({day.weekday})
                         </span>
+                        {isPast && (
+                          <span className="text-[9px] text-slate-400 bg-slate-200/80 px-1 py-0.2 rounded font-medium">
+                            過去
+                          </span>
+                        )}
                         {isYosshyAndTwoOthers && (
                           <span
                             className="text-[9px] bg-yellow-400 text-yellow-950 px-1.5 py-0.5 rounded font-black border border-yellow-500 shadow-2xs whitespace-nowrap"
@@ -851,7 +869,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                             今日
                           </span>
                         )}
-                        {isMax && maxAttendanceCount >= 3 && !isYosshyAndTwoOthers && (
+                        {isMax && maxAttendanceCount >= 3 && !isYosshyAndTwoOthers && !isPast && (
                           <span className="inline-flex items-center text-[9px] bg-amber-400 text-amber-950 px-1 rounded font-bold">
                             <Award className="w-2.5 h-2.5 mr-0.5" />最多
                           </span>
@@ -863,9 +881,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     <td className={`py-2.5 px-2 text-center ${morningColBg}`}>
                       {stats.morningCircleCount > 0 || stats.morningTriangleCount > 0 ? (
                         <div>
-                          <span className="font-bold text-emerald-700">◯ {stats.morningCircleCount}</span>
+                          <span className={`font-bold ${isPast ? 'text-slate-500' : 'text-emerald-700'}`}>
+                            ◯ {stats.morningCircleCount}
+                          </span>
                           {stats.morningTriangleCount > 0 && (
-                            <span className="text-[10px] text-amber-700 ml-1">△ {stats.morningTriangleCount}</span>
+                            <span className={`text-[10px] ml-1 ${isPast ? 'text-slate-400' : 'text-amber-700'}`}>
+                              △ {stats.morningTriangleCount}
+                            </span>
                           )}
                         </div>
                       ) : (
@@ -877,9 +899,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     <td className={`py-2.5 px-2 text-center ${afternoonColBg}`}>
                       {stats.afternoonCircleCount > 0 || stats.afternoonTriangleCount > 0 ? (
                         <div>
-                          <span className="font-bold text-teal-700">◯ {stats.afternoonCircleCount}</span>
+                          <span className={`font-bold ${isPast ? 'text-slate-500' : 'text-teal-700'}`}>
+                            ◯ {stats.afternoonCircleCount}
+                          </span>
                           {stats.afternoonTriangleCount > 0 && (
-                            <span className="text-[10px] text-amber-700 ml-1">△ {stats.afternoonTriangleCount}</span>
+                            <span className={`text-[10px] ml-1 ${isPast ? 'text-slate-400' : 'text-amber-700'}`}>
+                              △ {stats.afternoonTriangleCount}
+                            </span>
                           )}
                         </div>
                       ) : (
@@ -890,7 +916,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     {/* 合計人数 */}
                     <td className={`py-2.5 px-2 text-center font-bold ${totalColBg}`}>
                       {stats.totalAttendeesCount > 0 ? (
-                        <span className="text-emerald-700 text-xs font-black">
+                        <span className={`text-xs font-black ${isPast ? 'text-slate-500' : 'text-emerald-700'}`}>
                           {stats.totalAttendeesCount}名
                         </span>
                       ) : (
@@ -898,21 +924,31 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                       )}
                     </td>
 
-                    {/* 開催設定セル（イベントがある場合は表示、ない場合は作成ボタン） */}
+                    {/* 開催設定セル（過去で未作成の場合は入力不可の「-」、イベントがある場合は詳細） */}
                     <td className="py-2 px-3 text-xs">
                       {dayEvent ? (
                         <div
                           onClick={() => onSelectEvent(dayEvent)}
-                          className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded p-1 cursor-pointer transition"
+                          className={`${
+                            isPast
+                              ? 'bg-slate-200/70 hover:bg-slate-300/70 border-slate-300 text-slate-700'
+                              : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-900'
+                          } border rounded p-1 cursor-pointer transition`}
                         >
-                          <div className="font-bold text-emerald-900 flex items-center justify-between">
+                          <div className="font-bold flex items-center justify-between">
                             <span>{dayEvent.startTime} - {dayEvent.endTime}</span>
-                            <span className="text-[10px] text-emerald-700 underline">詳細</span>
+                            <span className={`text-[10px] underline ${isPast ? 'text-slate-500' : 'text-emerald-700'}`}>
+                              詳細
+                            </span>
                           </div>
-                          <div className="text-[10px] text-slate-600 truncate max-w-[150px]">
+                          <div className={`text-[10px] truncate max-w-[150px] ${isPast ? 'text-slate-500' : 'text-slate-600'}`}>
                             {dayEvent.location}
                           </div>
                         </div>
+                      ) : isPast ? (
+                        <span className="text-slate-400 text-xs font-medium pl-2 select-none">
+                          -
+                        </span>
                       ) : (
                         <button
                           type="button"
@@ -947,36 +983,36 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                           {mStatus === 'none' && aStatus === 'none' ? (
                             <span className="text-slate-300">-</span>
                           ) : (
-                            <div className="flex flex-col items-center justify-center space-y-1">
-                              <div className="flex items-center justify-center space-x-1">
-                                {/* 午前バッジ */}
-                                <span
-                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    mStatus === 'circle'
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : mStatus === 'triangle'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'text-slate-300'
-                                  }`}
-                                  title={mCond ? `午前: ${mCond}` : undefined}
-                                >
-                                  前:{mStatus === 'circle' ? '◯' : mStatus === 'triangle' ? '△' : '-'}
-                                </span>
+                              <div className={`flex flex-col items-center justify-center space-y-1 ${isPast ? 'opacity-60' : ''}`}>
+                                <div className="flex items-center justify-center space-x-1">
+                                  {/* 午前バッジ */}
+                                  <span
+                                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      mStatus === 'circle'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : mStatus === 'triangle'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'text-slate-300'
+                                    }`}
+                                    title={mCond ? `午前: ${mCond}` : undefined}
+                                  >
+                                    前:{mStatus === 'circle' ? '◯' : mStatus === 'triangle' ? '△' : '-'}
+                                  </span>
 
-                                {/* 午後バッジ */}
-                                <span
-                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    aStatus === 'circle'
-                                      ? 'bg-teal-100 text-teal-800'
-                                      : aStatus === 'triangle'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'text-slate-300'
-                                  }`}
-                                  title={aCond ? `午後: ${aCond}` : undefined}
-                                >
-                                  後:{aStatus === 'circle' ? '◯' : aStatus === 'triangle' ? '△' : '-'}
-                                </span>
-                              </div>
+                                  {/* 午後バッジ */}
+                                  <span
+                                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      aStatus === 'circle'
+                                        ? 'bg-teal-100 text-teal-800'
+                                        : aStatus === 'triangle'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'text-slate-300'
+                                    }`}
+                                    title={aCond ? `午後: ${aCond}` : undefined}
+                                  >
+                                    後:{aStatus === 'circle' ? '◯' : aStatus === 'triangle' ? '△' : '-'}
+                                  </span>
+                                </div>
 
                               {/* △の条件テキスト表示 */}
                               {(mCond || aCond) && (
