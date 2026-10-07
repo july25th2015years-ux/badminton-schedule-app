@@ -57,3 +57,12 @@ export interface AttendanceStats {
   afternoonAttendees: AttendeeDetail[];
   allAttendees: AttendeeDetail[];
 }
+
+export interface LocationPreset {
+  id: string;
+  name: string;
+  mapUrl?: string;
+  isDefault?: boolean;
+  createdAt?: string;
+}
+

@@ -10,7 +10,7 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
-import type { PracticeEvent, Attendance, SlotStatus, MonthlyNote } from '../types';
+import type { PracticeEvent, Attendance, SlotStatus, MonthlyNote, LocationPreset } from '../types';
 import { initializeOctoberMigration } from '../utils/migration';
 import { octoberSchedule, capturedAt } from '../data/october2026';
 
@@ -23,6 +23,7 @@ const STORAGE_KEYS = {
   ATTENDANCES: 'badminton_attendances',
   USER_NAME: 'badminton_user_name',
   MONTHLY_NOTES: 'badminton_monthly_notes',
+  LOCATIONS: 'badminton_location_presets',
 };
 
 // サンプルの初期データ生成（今月の日程）
@@ -584,3 +585,131 @@ export async function deleteAttendance(eventId: string, userName: string): Promi
   localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(list));
   emitSync();
 }
+
+/**
+ * 開催場所の初期プリセット
+ */
+export function getInitialLocationPresets(): LocationPreset[] {
+  return [
+    {
+      id: 'loc_kawaso',
+      name: 'スポーツパーク川副',
+      mapUrl: 'https://maps.app.goo.gl/n3ZRedeMvSsXP6Lm6',
+      isDefault: true,
+    },
+  ];
+}
+
+/**
+ * ローカルストレージの開催場所プリセット取得
+ */
+export function getLocalLocations(): LocationPreset[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
+    if (!raw) {
+      const initial = getInitialLocationPresets();
+      localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(initial));
+      return initial;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : getInitialLocationPresets();
+  } catch {
+    return getInitialLocationPresets();
+  }
+}
+
+/**
+ * 開催場所プリセットの購読（リアルタイム同期）
+ */
+export function subscribeToLocations(callback: (locations: LocationPreset[]) => void): () => void {
+  if (isFirebaseConfigured && db) {
+    const firestore = db;
+    const locRef = collection(firestore, 'locations');
+    const unsubscribe = onSnapshot(locRef, (snapshot) => {
+      if (snapshot.empty) {
+        // 初期データを投入
+        const initial = getInitialLocationPresets();
+        const batch = writeBatch(firestore);
+        initial.forEach(locItem => {
+          const docRef = doc(firestore, 'locations', locItem.id);
+          batch.set(docRef, cleanForFirestore(locItem), { merge: true });
+        });
+        batch.commit().catch(console.error);
+        callback(initial);
+        return;
+      }
+      const list: LocationPreset[] = [];
+      snapshot.forEach(docSnap => {
+        list.push({ ...docSnap.data(), id: docSnap.id } as LocationPreset);
+      });
+      // デフォルト優先、以降は名前順
+      list.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0) || a.name.localeCompare(b.name));
+      callback(list);
+    }, (err) => {
+      console.error('Firestore locations sync error, fallback to local:', err);
+      callback(getLocalLocations());
+    });
+    return unsubscribe;
+  }
+
+  // LocalStorage モード
+  const handler = () => {
+    callback(getLocalLocations());
+  };
+  handler();
+  window.addEventListener(SYNC_EVENT, handler);
+  window.addEventListener('storage', handler);
+  return () => {
+    window.removeEventListener(SYNC_EVENT, handler);
+    window.removeEventListener('storage', handler);
+  };
+}
+
+/**
+ * 開催場所プリセットの保存（新規または更新）
+ */
+export async function saveLocation(
+  locationData: Omit<LocationPreset, 'id' | 'createdAt'>,
+  id?: string
+): Promise<string> {
+  const locId = id || 'loc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  const now = new Date().toISOString();
+  const payload: LocationPreset = {
+    ...locationData,
+    id: locId,
+    createdAt: now,
+  };
+
+  if (isFirebaseConfigured && db) {
+    const docRef = doc(db, 'locations', locId);
+    await setDoc(docRef, cleanForFirestore(payload), { merge: true });
+    return locId;
+  }
+
+  const list = getLocalLocations();
+  const idx = list.findIndex(l => l.id === locId);
+  if (idx >= 0) {
+    list[idx] = payload;
+  } else {
+    list.push(payload);
+  }
+  localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(list));
+  emitSync();
+  return locId;
+}
+
+/**
+ * 開催場所プリセットの削除
+ */
+export async function deleteLocation(id: string): Promise<void> {
+  if (isFirebaseConfigured && db) {
+    const docRef = doc(db, 'locations', id);
+    await deleteDoc(docRef);
+    return;
+  }
+
+  const list = getLocalLocations().filter(l => l.id !== id);
+  localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(list));
+  emitSync();
+}
+
