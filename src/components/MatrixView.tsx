@@ -34,6 +34,12 @@ interface DraftSlot {
   afternoonCondition: string;
 }
 
+interface MissingConditionItem {
+  date: string;
+  formattedDate: string;
+  slotText: string;
+}
+
 export const MatrixView: React.FC<MatrixViewProps> = ({
   year,
   month,
@@ -65,6 +71,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [editingUserNotice, setEditingUserNotice] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [missingConditionModalData, setMissingConditionModalData] = useState<MissingConditionItem[] | null>(null);
 
   // ユーザー名の復元と初期スロット設定
   useEffect(() => {
@@ -254,19 +261,32 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
       return;
     }
 
-    // △で条件未入力のものがないか検証
+    // △で条件未入力のものがないか検証（未入力があればポップアップで注意を促し保存をブロック）
+    const missingItems: MissingConditionItem[] = [];
     for (const day of daysList) {
       const slot = draftSlots[day.date];
       if (slot) {
-        if (slot.morningStatus === 'triangle' && !slot.morningCondition.trim()) {
-          setErrorMsg(`${formatDateJa(day.date)} 午前の参加条件を入力してください`);
-          return;
-        }
-        if (slot.afternoonStatus === 'triangle' && !slot.afternoonCondition.trim()) {
-          setErrorMsg(`${formatDateJa(day.date)} 午後の参加条件を入力してください`);
-          return;
+        const isMorningMissing = slot.morningStatus === 'triangle' && !slot.morningCondition.trim();
+        const isAfternoonMissing = slot.afternoonStatus === 'triangle' && !slot.afternoonCondition.trim();
+
+        if (isMorningMissing || isAfternoonMissing) {
+          let slotText = '';
+          if (isMorningMissing && isAfternoonMissing) slotText = '午前・午後';
+          else if (isMorningMissing) slotText = '午前';
+          else slotText = '午後';
+
+          missingItems.push({
+            date: day.date,
+            formattedDate: formatDateJa(day.date),
+            slotText,
+          });
         }
       }
+    }
+
+    if (missingItems.length > 0) {
+      setMissingConditionModalData(missingItems);
+      return; // 条件が入力されていないまま保存は絶対にできないようにブロック
     }
 
     setIsSaving(true);
@@ -301,6 +321,42 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // 「ヨッシー」の表記ゆれ判定ヘルパー
+  const isYosshyName = (n: string) => {
+    const norm = n.trim().toLowerCase();
+    return norm === 'ヨッシー' || norm === 'よっしー' || norm === 'yosshy' || norm === 'yossy';
+  };
+
+  // 「ヨッシーが参加できる日で、ヨッシー以外が2人以上参加できる日」を判定
+  const checkIsYosshyAndTwoOthers = (dateStr: string) => {
+    const dayEvent = events.find(e => e.date === dateStr);
+    const relevantIds = [dateStr];
+    if (dayEvent) relevantIds.push(dayEvent.id);
+
+    // ヨッシーの出欠
+    const yosshyAtt = attendances.find(
+      a => relevantIds.includes(a.eventId) && isYosshyName(a.userName)
+    );
+    const yosshyM = yosshyAtt?.morningStatus || (yosshyAtt?.status as any) || 'none';
+    const yosshyA = yosshyAtt?.afternoonStatus || (yosshyAtt?.status as any) || 'none';
+    const isYosshyAttending = yosshyM === 'circle' || yosshyM === 'triangle' || yosshyA === 'circle' || yosshyA === 'triangle';
+
+    if (!isYosshyAttending) return false;
+
+    // ヨッシー以外の参加者数（午前または午後に◯または△）
+    const otherAttendees = allUserNames.filter(name => {
+      if (isYosshyName(name)) return false;
+      const att = attendances.find(
+        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
+      );
+      const m = att?.morningStatus || (att?.status as any) || 'none';
+      const a = att?.afternoonStatus || (att?.status as any) || 'none';
+      return m === 'circle' || m === 'triangle' || a === 'circle' || a === 'triangle';
+    });
+
+    return otherAttendees.length >= 2;
   };
 
   // 最多参加者数の算出（ハイライト用）
@@ -636,12 +692,15 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             <h3 className="text-sm sm:text-base font-bold text-slate-800 flex items-center space-x-2">
               <span>📊 {year}年{month}月 メンバー出欠確認・日程調整表</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              1日〜月末までの全日程の参加希望人数が集計されています。
-              <span className="text-emerald-700 font-semibold ml-1.5 inline-block">
+            <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>1日〜月末までの全日程の参加希望人数が集計されています。</span>
+              <span className="text-emerald-700 font-semibold inline-block">
                 💡 お名前をクリックすると出欠を再度修正できます
               </span>
-            </p>
+              <span className="inline-flex items-center space-x-1 bg-yellow-100 text-yellow-900 border border-yellow-300 px-2 py-0.5 rounded font-bold">
+                <span>⭐ 黄色ハイライト: ヨッシー＋他2名以上が参加できる日</span>
+              </span>
+            </div>
           </div>
           <div className="flex items-center space-x-2 text-xs text-slate-600">
             <span className="font-semibold bg-emerald-50 text-emerald-800 px-2 py-1 rounded border border-emerald-200">
@@ -650,11 +709,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* スクロールコンテナ（縦・横スクロール可能、最大高さ指定） */}
+        <div className="overflow-auto max-h-[520px] border-b border-slate-200 relative">
           <table className="w-full text-xs text-left border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-slate-100 shadow-xs">
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                <th className="py-2.5 px-3 min-w-[130px] font-bold sticky left-0 bg-slate-100 z-10 shadow-[1px_0_0_0_#e2e8f0]">
+                <th className="py-2.5 px-3 min-w-[130px] font-bold sticky left-0 top-0 bg-slate-100 z-30 shadow-[1px_0_0_0_#e2e8f0]">
                   日程・曜日
                 </th>
                 <th className="py-2.5 px-2 text-center min-w-[85px] font-bold text-amber-900 bg-amber-50/80">
@@ -712,10 +772,28 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 const stats = getDateAttendanceStats(day.date, events, attendances);
                 const dayEvent = events.find(e => e.date === day.date);
                 const isMax = maxAttendanceCount > 0 && stats.totalAttendeesCount === maxAttendanceCount;
+                const isYosshyAndTwoOthers = checkIsYosshyAndTwoOthers(day.date);
 
                 let rowBg = 'hover:bg-slate-50/80';
-                if (day.isToday) rowBg = 'bg-emerald-50/30 hover:bg-emerald-50/60';
-                else if (isMax && maxAttendanceCount >= 3) rowBg = 'bg-amber-50/30 hover:bg-amber-50/60';
+                let stickyColBg = 'bg-white group-hover:bg-slate-50';
+                let morningColBg = 'bg-amber-50/20';
+                let afternoonColBg = 'bg-teal-50/20';
+                let totalColBg = 'bg-emerald-50/30';
+
+                if (isYosshyAndTwoOthers) {
+                  // ヨッシーが参加でき、他2名以上が参加できる日を黄色で背景をぬる
+                  rowBg = 'bg-yellow-100/90 hover:bg-yellow-200/90 font-medium';
+                  stickyColBg = 'bg-yellow-100 group-hover:bg-yellow-200';
+                  morningColBg = 'bg-yellow-200/40';
+                  afternoonColBg = 'bg-yellow-200/40';
+                  totalColBg = 'bg-yellow-300/40';
+                } else if (day.isToday) {
+                  rowBg = 'bg-emerald-50/30 hover:bg-emerald-50/60';
+                  stickyColBg = 'bg-emerald-50/50 group-hover:bg-emerald-100/50';
+                } else if (isMax && maxAttendanceCount >= 3) {
+                  rowBg = 'bg-amber-50/30 hover:bg-amber-50/60';
+                  stickyColBg = 'bg-amber-50/40 group-hover:bg-amber-100/40';
+                }
 
                 let dayTextColor = 'text-slate-800';
                 if (day.isSunday) dayTextColor = 'text-rose-600 font-bold';
@@ -724,17 +802,22 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 return (
                   <tr key={day.date} className={`${rowBg} transition group`}>
                     {/* 日程セル（固定列） */}
-                    <td className="py-2.5 px-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 shadow-[1px_0_0_0_#e2e8f0]">
-                      <div className="flex items-center space-x-1.5">
+                    <td className={`py-2.5 px-3 sticky left-0 ${stickyColBg} z-10 shadow-[1px_0_0_0_#e2e8f0] transition`}>
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                         <span className={`text-xs ${dayTextColor}`}>
                           {day.dayNumber}日({day.weekday})
                         </span>
+                        {isYosshyAndTwoOthers && (
+                          <span className="text-[9px] bg-yellow-400 text-yellow-950 px-1.5 py-0.5 rounded font-black border border-yellow-500 shadow-2xs whitespace-nowrap">
+                            ⭐ヨッシー+2名
+                          </span>
+                        )}
                         {day.isToday && (
                           <span className="text-[9px] bg-emerald-600 text-white px-1 rounded font-bold">
                             今日
                           </span>
                         )}
-                        {isMax && maxAttendanceCount >= 3 && (
+                        {isMax && maxAttendanceCount >= 3 && !isYosshyAndTwoOthers && (
                           <span className="inline-flex items-center text-[9px] bg-amber-400 text-amber-950 px-1 rounded font-bold">
                             <Award className="w-2.5 h-2.5 mr-0.5" />最多
                           </span>
@@ -743,7 +826,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     </td>
 
                     {/* 午前 合計 */}
-                    <td className="py-2.5 px-2 text-center bg-amber-50/20">
+                    <td className={`py-2.5 px-2 text-center ${morningColBg}`}>
                       {stats.morningCircleCount > 0 || stats.morningTriangleCount > 0 ? (
                         <div>
                           <span className="font-bold text-emerald-700">◯ {stats.morningCircleCount}</span>
@@ -757,7 +840,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     </td>
 
                     {/* 午後 合計 */}
-                    <td className="py-2.5 px-2 text-center bg-teal-50/20">
+                    <td className={`py-2.5 px-2 text-center ${afternoonColBg}`}>
                       {stats.afternoonCircleCount > 0 || stats.afternoonTriangleCount > 0 ? (
                         <div>
                           <span className="font-bold text-teal-700">◯ {stats.afternoonCircleCount}</span>
@@ -771,7 +854,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     </td>
 
                     {/* 合計人数 */}
-                    <td className="py-2.5 px-2 text-center font-bold bg-emerald-50/30">
+                    <td className={`py-2.5 px-2 text-center font-bold ${totalColBg}`}>
                       {stats.totalAttendeesCount > 0 ? (
                         <span className="text-emerald-700 text-xs font-black">
                           {stats.totalAttendeesCount}名
@@ -900,6 +983,60 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* △条件未入力の警告ポップアップモーダル */}
+      {missingConditionModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border-2 border-amber-400 overflow-hidden transform animate-in zoom-in-95 duration-150">
+            <div className="bg-amber-500 text-white p-4 flex items-center space-x-3">
+              <AlertCircle className="w-6 h-6 text-white shrink-0" />
+              <div>
+                <h3 className="font-bold text-base">参加条件を入力してください</h3>
+                <p className="text-xs text-amber-100">
+                  「△」を選択している日程の条件が未入力です
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-700 leading-relaxed">
+                出欠で「△」を選んだ場合は、参加可能な条件（例: 「10時以降なら可」「用事次第」など）の入力が必要です。
+                <br />
+                以下の日程の条件を入力してから再度保存してください。
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2">
+                <div className="text-[11px] font-bold text-amber-900 mb-1">
+                  【条件が未入力の日程】
+                </div>
+                {missingConditionModalData.map((item) => (
+                  <div
+                    key={item.date}
+                    className="flex items-center justify-between text-xs bg-white px-3 py-2 rounded-lg border border-amber-200 text-slate-800"
+                  >
+                    <span className="font-bold text-amber-950">
+                      📅 {item.formattedDate}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      {item.slotText}：△ 未入力
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setMissingConditionModalData(null)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 text-white font-bold text-xs shadow-md transition"
+                >
+                  カレンダーに戻って入力する
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
