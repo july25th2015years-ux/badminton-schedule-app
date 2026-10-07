@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import type { PracticeEvent } from '../types';
-import { X, Calendar, Clock, Link2, AlertCircle } from 'lucide-react';
+import { X, Calendar, Clock, Link2, AlertCircle, ExternalLink } from 'lucide-react';
 import { saveEvent } from '../services/storage';
+
+export const DEFAULT_LOCATION = 'スポーツパーク川副';
+export const DEFAULT_MAP_URL = 'https://maps.app.goo.gl/n3ZRedeMvSsXP6Lm6';
 
 interface EventEditModalProps {
   isOpen: boolean;
@@ -25,8 +28,12 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
   const [date, setDate] = useState(initialDate || todayStr);
   const [startTime, setStartTime] = useState('19:00');
   const [endTime, setEndTime] = useState('21:00');
-  const [location, setLocation] = useState('');
-  const [mapUrl, setMapUrl] = useState('');
+
+  // 開催場所の選択肢（'kawaso': スポーツパーク川副, 'other': その他・直接入力）
+  const [locationType, setLocationType] = useState<'kawaso' | 'other'>('kawaso');
+  const [customLocation, setCustomLocation] = useState('');
+  const [customMapUrl, setCustomMapUrl] = useState('');
+
   const [courtCount, setCourtCount] = useState('2面');
   const [notes, setNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -37,16 +44,25 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
       setDate(editingEvent.date);
       setStartTime(editingEvent.startTime);
       setEndTime(editingEvent.endTime);
-      setLocation(editingEvent.location);
-      setMapUrl(editingEvent.mapUrl || '');
       setCourtCount(editingEvent.courtCount || '');
       setNotes(editingEvent.notes || '');
+
+      if (editingEvent.location === DEFAULT_LOCATION) {
+        setLocationType('kawaso');
+        setCustomLocation('');
+        setCustomMapUrl('');
+      } else {
+        setLocationType('other');
+        setCustomLocation(editingEvent.location);
+        setCustomMapUrl(editingEvent.mapUrl || '');
+      }
     } else {
       setDate(initialDate || todayStr);
       setStartTime('19:00');
       setEndTime('21:00');
-      setLocation('');
-      setMapUrl('');
+      setLocationType('kawaso');
+      setCustomLocation('');
+      setCustomMapUrl('');
       setCourtCount('2面');
       setNotes('');
     }
@@ -68,7 +84,11 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
       setErrorMsg('終了時間は開始時間より後の時間を指定してください');
       return;
     }
-    if (!location.trim()) {
+
+    const finalLocation = locationType === 'kawaso' ? DEFAULT_LOCATION : customLocation.trim();
+    const finalMapUrl = locationType === 'kawaso' ? DEFAULT_MAP_URL : (customMapUrl.trim() || undefined);
+
+    if (!finalLocation) {
       setErrorMsg('開催場所（体育館名など）を入力してください');
       return;
     }
@@ -81,8 +101,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
         date,
         startTime,
         endTime,
-        location: location.trim(),
-        mapUrl: mapUrl.trim() || undefined,
+        location: finalLocation,
+        mapUrl: finalMapUrl,
         courtCount: courtCount.trim() || undefined,
         notes: notes.trim() || undefined,
       }, editingEvent?.id);
@@ -133,15 +153,13 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               開催日 <span className="text-rose-500">*</span>
             </label>
-            <div className="relative">
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full text-sm px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
           </div>
 
           {/* 時間帯 */}
@@ -178,42 +196,77 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
             </div>
           </div>
 
-          {/* 開催場所 */}
+          {/* 開催場所（プルダウン選択） */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               開催場所（施設名・体育館名） <span className="text-rose-500">*</span>
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="例: 世田谷区総合運動場 温水プール体育館"
-                required
-                className="w-full text-sm px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
+            <select
+              value={locationType}
+              onChange={(e) => setLocationType(e.target.value as 'kawaso' | 'other')}
+              className="w-full text-sm px-3 py-2.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="kawaso">スポーツパーク川副（デフォルト）</option>
+              <option value="other">その他の体育館（直接入力）</option>
+            </select>
+
+            {/* スポーツパーク川副 選択時：自動設定の案内 */}
+            {locationType === 'kawaso' && (
+              <div className="mt-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-sm">📍</span>
+                  <span className="font-semibold">GoogleマップURL: 自動設定済み</span>
+                </div>
+                <a
+                  href={DEFAULT_MAP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-700 hover:text-emerald-900 font-semibold underline flex items-center space-x-0.5 text-[11px]"
+                >
+                  <span>マップを確認</span>
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                </a>
+              </div>
+            )}
           </div>
 
-          {/* GoogleマップURL（任意） */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Google マップURL（任意）
-            </label>
-            <div className="flex items-center">
-              <Link2 className="w-4 h-4 text-slate-400 mr-1.5 shrink-0" />
-              <input
-                type="url"
-                value={mapUrl}
-                onChange={(e) => setMapUrl(e.target.value)}
-                placeholder="https://maps.app.goo.gl/... または空欄"
-                className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+          {/* その他の体育館 選択時：手動入力フィールド */}
+          {locationType === 'other' && (
+            <div className="space-y-3.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  体育館・施設名を入力 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={customLocation}
+                  onChange={(e) => setCustomLocation(e.target.value)}
+                  placeholder="例: 佐賀県総合体育館、〇〇市民体育館 など"
+                  required
+                  className="w-full text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Google マップURL（任意）
+                </label>
+                <div className="flex items-center">
+                  <Link2 className="w-4 h-4 text-slate-400 mr-1.5 shrink-0" />
+                  <input
+                    type="url"
+                    value={customMapUrl}
+                    onChange={(e) => setCustomMapUrl(e.target.value)}
+                    placeholder="https://maps.app.goo.gl/... または空欄"
+                    className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  ※空欄の場合は、上記施設名をもとにGoogleマップの検索リンクが自動生成されます。
+                </p>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
-              ※空欄の場合は、上記「開催場所」の名前をもとにGoogleマップの検索リンクが自動生成されます。
-            </p>
-          </div>
+          )}
 
           {/* コート面数 */}
           <div>
