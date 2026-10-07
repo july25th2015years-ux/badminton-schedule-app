@@ -329,7 +329,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     return norm === 'ヨッシー' || norm === 'よっしー' || norm === 'yosshy' || norm === 'yossy';
   };
 
-  // 「ヨッシーが参加できる日で、ヨッシー以外が2人以上参加できる日」を判定
+  // 「ヨッシーが参加できる日で、ヨッシー以外が2人以上参加できる」判定（午前・午後それぞれ別々に判定）
   const checkIsYosshyAndTwoOthers = (dateStr: string) => {
     const dayEvent = events.find(e => e.date === dateStr);
     const relevantIds = [dateStr];
@@ -341,22 +341,41 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     );
     const yosshyM = yosshyAtt?.morningStatus || (yosshyAtt?.status as any) || 'none';
     const yosshyA = yosshyAtt?.afternoonStatus || (yosshyAtt?.status as any) || 'none';
-    const isYosshyAttending = yosshyM === 'circle' || yosshyM === 'triangle' || yosshyA === 'circle' || yosshyA === 'triangle';
+    const isYosshyMorning = yosshyM === 'circle' || yosshyM === 'triangle';
+    const isYosshyAfternoon = yosshyA === 'circle' || yosshyA === 'triangle';
 
-    if (!isYosshyAttending) return false;
-
-    // ヨッシー以外の参加者数（午前または午後に◯または△）
-    const otherAttendees = allUserNames.filter(name => {
+    // ヨッシー以外の午前参加可能者数（午前が◯または△）
+    const otherMorningCount = allUserNames.filter(name => {
       if (isYosshyName(name)) return false;
       const att = attendances.find(
         a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
       );
       const m = att?.morningStatus || (att?.status as any) || 'none';
-      const a = att?.afternoonStatus || (att?.status as any) || 'none';
-      return m === 'circle' || m === 'triangle' || a === 'circle' || a === 'triangle';
-    });
+      return m === 'circle' || m === 'triangle';
+    }).length;
 
-    return otherAttendees.length >= 2;
+    // ヨッシー以外の午後参加可能者数（午後が◯または△）
+    const otherAfternoonCount = allUserNames.filter(name => {
+      if (isYosshyName(name)) return false;
+      const att = attendances.find(
+        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
+      );
+      const a = att?.afternoonStatus || (att?.status as any) || 'none';
+      return a === 'circle' || a === 'triangle';
+    }).length;
+
+    // 午前スロット成立: ヨッシーが午前参加可能 かつ 他2人以上が午前参加可能
+    const morningMatch = isYosshyMorning && otherMorningCount >= 2;
+    // 午後スロット成立: ヨッシーが午後参加可能 かつ 他2人以上が午後参加可能
+    const afternoonMatch = isYosshyAfternoon && otherAfternoonCount >= 2;
+
+    return {
+      isMatch: morningMatch || afternoonMatch,
+      morningMatch,
+      afternoonMatch,
+      otherMorningCount,
+      otherAfternoonCount,
+    };
   };
 
   // 最多参加者数の算出（ハイライト用）
@@ -698,7 +717,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 💡 お名前をクリックすると出欠を再度修正できます
               </span>
               <span className="inline-flex items-center space-x-1 bg-yellow-100 text-yellow-900 border border-yellow-300 px-2 py-0.5 rounded font-bold">
-                <span>⭐ 黄色ハイライト: ヨッシー＋他2名以上が参加できる日</span>
+                <span>⭐ 黄色ハイライト: 午前または午後の同時間帯にヨッシー＋他2名以上参加可能</span>
               </span>
             </div>
           </div>
@@ -772,7 +791,8 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 const stats = getDateAttendanceStats(day.date, events, attendances);
                 const dayEvent = events.find(e => e.date === day.date);
                 const isMax = maxAttendanceCount > 0 && stats.totalAttendeesCount === maxAttendanceCount;
-                const isYosshyAndTwoOthers = checkIsYosshyAndTwoOthers(day.date);
+                const yosshyCheck = checkIsYosshyAndTwoOthers(day.date);
+                const isYosshyAndTwoOthers = yosshyCheck.isMatch;
 
                 let rowBg = 'hover:bg-slate-50/80';
                 let stickyColBg = 'bg-white group-hover:bg-slate-50';
@@ -781,12 +801,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 let totalColBg = 'bg-emerald-50/30';
 
                 if (isYosshyAndTwoOthers) {
-                  // ヨッシーが参加でき、他2名以上が参加できる日を黄色で背景をぬる
+                  // 午前または午後の同一時間帯でヨッシー＋他2名以上が参加できる日を黄色で背景をぬる
                   rowBg = 'bg-yellow-100/90 hover:bg-yellow-200/90 font-medium';
                   stickyColBg = 'bg-yellow-100 group-hover:bg-yellow-200';
-                  morningColBg = 'bg-yellow-200/40';
-                  afternoonColBg = 'bg-yellow-200/40';
-                  totalColBg = 'bg-yellow-300/40';
+                  morningColBg = yosshyCheck.morningMatch ? 'bg-yellow-200/80 font-bold' : 'bg-yellow-100/40';
+                  afternoonColBg = yosshyCheck.afternoonMatch ? 'bg-yellow-200/80 font-bold' : 'bg-yellow-100/40';
+                  totalColBg = 'bg-yellow-300/50';
                 } else if (day.isToday) {
                   rowBg = 'bg-emerald-50/30 hover:bg-emerald-50/60';
                   stickyColBg = 'bg-emerald-50/50 group-hover:bg-emerald-100/50';
@@ -808,8 +828,22 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                           {day.dayNumber}日({day.weekday})
                         </span>
                         {isYosshyAndTwoOthers && (
-                          <span className="text-[9px] bg-yellow-400 text-yellow-950 px-1.5 py-0.5 rounded font-black border border-yellow-500 shadow-2xs whitespace-nowrap">
+                          <span
+                            className="text-[9px] bg-yellow-400 text-yellow-950 px-1.5 py-0.5 rounded font-black border border-yellow-500 shadow-2xs whitespace-nowrap"
+                            title={
+                              yosshyCheck.morningMatch && yosshyCheck.afternoonMatch
+                                ? '午前・午後ともにヨッシー＋他2名以上参加可能'
+                                : yosshyCheck.morningMatch
+                                ? '午前にヨッシー＋他2名以上参加可能'
+                                : '午後にヨッシー＋他2名以上参加可能'
+                            }
+                          >
                             ⭐ヨッシー+2名
+                            {yosshyCheck.morningMatch && yosshyCheck.afternoonMatch
+                              ? '(終日)'
+                              : yosshyCheck.morningMatch
+                              ? '(午前)'
+                              : '(午後)'}
                           </span>
                         )}
                         {day.isToday && (
