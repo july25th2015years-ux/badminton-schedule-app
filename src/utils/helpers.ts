@@ -196,3 +196,65 @@ export function getNextUpcomingEvent(events: PracticeEvent[]): PracticeEvent | n
 
   return upcoming.length > 0 ? upcoming[0] : null;
 }
+
+/**
+ * ある年月の全日程情報（1日〜月末）
+ */
+export interface MonthDayInfo {
+  date: string; // YYYY-MM-DD
+  dayNumber: number;
+  weekday: string;
+  isSunday: boolean;
+  isSaturday: boolean;
+  isWeekend: boolean;
+  isToday: boolean;
+}
+
+/**
+ * 1日〜月末までの全日程リストを取得
+ */
+export function getMonthDaysList(year: number, month: number): MonthDayInfo[] {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const list: MonthDayInfo[] = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const weekday = getWeekdayJa(dateStr);
+    const dayOfWeek = new Date(year, month - 1, day).getDay();
+    list.push({
+      date: dateStr,
+      dayNumber: day,
+      weekday,
+      isSunday: dayOfWeek === 0,
+      isSaturday: dayOfWeek === 6,
+      isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+      isToday: dateStr === todayStr,
+    });
+  }
+
+  return list;
+}
+
+/**
+ * 日付単位での出欠集計（イベント紐付け & 直接日付紐付けの両方に対応）
+ */
+export function getDateAttendanceStats(
+  dateStr: string,
+  events: PracticeEvent[],
+  attendances: Attendance[]
+): AttendanceStats {
+  const event = events.find(e => e.date === dateStr);
+  const relevantEventIds = [dateStr];
+  if (event) {
+    relevantEventIds.push(event.id);
+  }
+
+  const dateAttendances = attendances.filter(a => relevantEventIds.includes(a.eventId));
+  
+  // eventIdを仮に dateStr に統一して集計
+  const normalizedAttendances = dateAttendances.map(a => ({ ...a, eventId: dateStr }));
+  return getEventAttendanceStats(normalizedAttendances, dateStr);
+}
+

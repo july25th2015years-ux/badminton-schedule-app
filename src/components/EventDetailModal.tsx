@@ -59,6 +59,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState('');
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   // 以前のユーザー名、またはこのイベントに回答済みのデータがあれば復元
   useEffect(() => {
@@ -264,18 +265,37 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <Edit2 className="w-3.5 h-3.5" />
                 <span>日程を編集</span>
               </button>
-              <button
-                onClick={() => {
-                  if (window.confirm(`${formatDateJa(event.date)} の練習会を削除しますか？`)) {
-                    onDeleteEvent(event.id);
-                    onClose();
-                  }
-                }}
-                className="inline-flex items-center space-x-1 text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded transition"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>削除</span>
-              </button>
+              {isConfirmingDelete ? (
+                <div className="flex items-center space-x-1.5 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg animate-in fade-in">
+                  <span className="text-[11px] text-rose-700 font-bold">本当に削除しますか？</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteEvent(event.id);
+                      onClose();
+                    }}
+                    className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded shadow-2xs transition"
+                  >
+                    削除する
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(false)}
+                    className="px-2 py-0.5 bg-white text-slate-600 hover:bg-slate-100 text-[11px] font-medium rounded border border-slate-200 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(true)}
+                  className="inline-flex items-center space-x-1 text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>削除</span>
+                </button>
+              )}
             </div>
           </div>
 

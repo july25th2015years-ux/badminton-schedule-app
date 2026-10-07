@@ -109,40 +109,29 @@ function getInitialSampleAttendances(): Attendance[] {
 // LocalStorageの読み込み
 function getLocalEvents(): PracticeEvent[] {
   const raw = localStorage.getItem(STORAGE_KEYS.EVENTS);
-  if (!raw) {
+  if (raw === null) {
     const samples = getInitialSampleEvents();
     localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
     return samples;
   }
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      const samples = getInitialSampleEvents();
-      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
-      return samples;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    const samples = getInitialSampleEvents();
-    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(samples));
-    return samples;
+    return [];
   }
 }
 
 function getLocalAttendances(): Attendance[] {
   const raw = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
-  if (!raw) {
+  if (raw === null) {
     const samples = getInitialSampleAttendances();
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(samples));
     return samples;
   }
   try {
     const list: Attendance[] = JSON.parse(raw);
-    if (!Array.isArray(list) || list.length === 0) {
-      const samples = getInitialSampleAttendances();
-      localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(samples));
-      return samples;
-    }
+    if (!Array.isArray(list)) return [];
     // 既存データの正規化
     return list.map(a => ({
       ...a,
@@ -152,9 +141,7 @@ function getLocalAttendances(): Attendance[] {
       afternoonCondition: a.afternoonCondition || (a.status === 'triangle' ? a.condition : undefined),
     }));
   } catch {
-    const samples = getInitialSampleAttendances();
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(samples));
-    return samples;
+    return [];
   }
 }
 
