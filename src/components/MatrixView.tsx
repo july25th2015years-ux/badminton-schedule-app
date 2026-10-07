@@ -17,6 +17,8 @@ import {
   Pencil
 } from 'lucide-react';
 import { getStoredUserName, setStoredUserName, saveUserMonthBulkAttendances } from '../services/storage';
+import { MonthlyNotes } from './MonthlyNotes';
+import { MIGRATED_MEMBERS, MIGRATED_MONTH } from '../utils/migration';
 
 interface MatrixViewProps {
   year: number;
@@ -55,17 +57,18 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   const calendarDays = getCalendarGrid(year, month, events);
 
   // 全参加者名のユニークリスト（名前順）
-  const allUserNames = Array.from(
+  const additionalUserNames = Array.from(
     new Set(
       attendances
         .filter((a) => a.userName && a.userName.trim())
         .map((a) => a.userName.trim())
     )
   ).sort((a, b) => a.localeCompare(b, 'ja'));
+  const allUserNames = [...MIGRATED_MEMBERS, ...additionalUserNames.filter(name => !MIGRATED_MEMBERS.includes(name))];
 
   // --- ポチポチ一括入力用の状態 ---
   const inputCardRef = useRef<HTMLDivElement>(null);
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(getStoredUserName);
   const [draftSlots, setDraftSlots] = useState<{ [dateStr: string]: DraftSlot }>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -75,14 +78,8 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
   // ユーザー名の復元と初期スロット設定
   useEffect(() => {
-    const savedName = getStoredUserName();
-    if (savedName) {
-      setUserName(savedName);
-      loadUserSlots(savedName);
-    } else {
-      loadUserSlots('');
-    }
-  }, [year, month, attendances]);
+    loadUserSlots(userName);
+  }, [year, month, attendances, userName]);
 
   // 特定ユーザーの最新出欠を取得するヘルパー（重複時も最新を確実に取得）
   const getLatestUserAttendance = (relevantIds: string[], targetName: string) => {
@@ -92,7 +89,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     return list.length > 0 ? list[list.length - 1] : null;
   };
 
-  const loadUserSlots = (name: string) => {
+  function loadUserSlots(name: string) {
     const slots: { [dateStr: string]: DraftSlot } = {};
     const trimmed = name.trim().toLowerCase();
 
@@ -377,6 +374,11 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
   return (
     <div className="space-y-5">
+      {`${year}-${String(month).padStart(2, '0')}` === MIGRATED_MONTH && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+          2026年10月の9名の出欠・備考を元サイトから移行しました（空欄→◯、✕→－）。移行後の変更はこの画面で入力できます。
+        </p>
+      )}
       {/* 1. ポチポチ出欠一括入力カード（その月の全日程1日〜末日） */}
       <div ref={inputCardRef} className="bg-white rounded-2xl shadow-sm border-2 border-emerald-500/30 overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 px-4 py-3.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -460,11 +462,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
           {/* お名前入力欄 */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 pb-3 border-b border-slate-100 bg-slate-50 p-3 rounded-xl">
-            <label className="text-xs font-bold text-slate-800 sm:w-28 shrink-0">
+            <label htmlFor="attendance-user-name" className="text-xs font-bold text-slate-800 sm:w-28 shrink-0">
               あなたのお名前 <span className="text-rose-500">*</span>
             </label>
             <div className="flex items-center space-x-2 flex-1 max-w-sm">
               <input
+                id="attendance-user-name"
                 type="text"
                 value={userName}
                 onChange={(e) => handleNameChange(e.target.value)}
@@ -481,6 +484,16 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             <span className="text-xs text-slate-500">
               （入力または下の名前クリックで過去の回答を復元）
             </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2" aria-label="メンバーを選択">
+            {MIGRATED_MEMBERS.map(name => (
+              <button key={name} type="button" onClick={() => handleSelectUserToEdit(name)}
+                aria-pressed={userName.trim() === name}
+                className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${userName.trim() === name ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300 text-slate-700 hover:bg-emerald-50'}`}>
+                {name}
+              </button>
+            ))}
           </div>
 
           {/* カレンダー形式（日曜始まり7列）の出欠入力グリッド */}
@@ -590,6 +603,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                             type="button"
                             disabled={isPast}
                             onClick={() => toggleSlot(day.date, 'morning')}
+                            aria-label={`${day.dayNumber}日 午前 ${slot.morningStatus === 'circle' ? '◯' : slot.morningStatus === 'triangle' ? '△' : '－'}`}
                             title={isPast ? '過去の日付は入力できません' : '午前: タップで ◯ / △ / - を切り替え'}
                             className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
                               isPast
@@ -621,6 +635,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                                   }));
                                 }}
                                 placeholder="午前△の条件"
+                                aria-label={`${day.dayNumber}日 午前の参加条件`}
                                 title="午前の参加条件を入力してください"
                                 className="w-full px-1 py-0.5 rounded border border-amber-400 bg-amber-50 text-[10px] text-amber-950 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                               />
@@ -632,6 +647,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                             type="button"
                             disabled={isPast}
                             onClick={() => toggleSlot(day.date, 'afternoon')}
+                            aria-label={`${day.dayNumber}日 午後 ${slot.afternoonStatus === 'circle' ? '◯' : slot.afternoonStatus === 'triangle' ? '△' : '－'}`}
                             title={isPast ? '過去の日付は入力できません' : '午後: タップで ◯ / △ / - を切り替え'}
                             className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
                               isPast
@@ -663,6 +679,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                                   }));
                                 }}
                                 placeholder="午後△の条件"
+                                aria-label={`${day.dayNumber}日 午後の参加条件`}
                                 title="午後の参加条件を入力してください"
                                 className="w-full px-1 py-0.5 rounded border border-teal-400 bg-teal-50 text-[10px] text-teal-950 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
                               />
@@ -1042,6 +1059,8 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
           </table>
         </div>
       </div>
+
+      <MonthlyNotes month={`${year}-${String(month).padStart(2, '0')}`} userName={userName} />
 
       {/* △条件未入力の警告ポップアップモーダル */}
       {missingConditionModalData && (

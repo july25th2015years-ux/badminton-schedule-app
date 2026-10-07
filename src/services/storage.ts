@@ -10,12 +10,19 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
-import type { PracticeEvent, Attendance, SlotStatus } from '../types';
+import type { PracticeEvent, Attendance, SlotStatus, MonthlyNote } from '../types';
+import { initializeOctoberMigration } from '../utils/migration';
+import { octoberSchedule, capturedAt } from '../data/october2026';
+
+function ensureOctoberMigration() {
+  initializeOctoberMigration(localStorage, octoberSchedule, capturedAt);
+}
 
 const STORAGE_KEYS = {
   EVENTS: 'badminton_events',
   ATTENDANCES: 'badminton_attendances',
   USER_NAME: 'badminton_user_name',
+  MONTHLY_NOTES: 'badminton_monthly_notes',
 };
 
 // サンプルの初期データ生成（今月の日程）
@@ -108,6 +115,7 @@ function getInitialSampleAttendances(): Attendance[] {
 
 // LocalStorageの読み込み
 function getLocalEvents(): PracticeEvent[] {
+  ensureOctoberMigration();
   const raw = localStorage.getItem(STORAGE_KEYS.EVENTS);
   if (raw === null) {
     const samples = getInitialSampleEvents();
@@ -123,6 +131,7 @@ function getLocalEvents(): PracticeEvent[] {
 }
 
 function getLocalAttendances(): Attendance[] {
+  ensureOctoberMigration();
   const raw = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
   if (raw === null) {
     const samples = getInitialSampleAttendances();
@@ -155,8 +164,54 @@ export function resetToSampleData(): void {
 
 // カスタムイベントでローカル購読者に即時通知
 const SYNC_EVENT = 'badminton_local_sync';
+const NOTES_SYNC_EVENT = 'badminton_notes_sync';
 function emitSync() {
   window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+}
+
+function getLocalMonthlyNotes(): MonthlyNote[] {
+  ensureOctoberMigration();
+  try {
+    const notes = JSON.parse(localStorage.getItem(STORAGE_KEYS.MONTHLY_NOTES) || '[]');
+    return Array.isArray(notes) ? notes : [];
+  } catch {
+    return [];
+  }
+}
+
+export function subscribeToMonthlyNotes(callback: (notes: MonthlyNote[]) => void): () => void {
+  if (isFirebaseConfigured && db) {
+    return onSnapshot(collection(db, 'monthlyNotes'), snapshot => {
+      callback(snapshot.docs.map(note => ({ ...note.data(), id: note.id } as MonthlyNote)));
+    }, () => callback(getLocalMonthlyNotes()));
+  }
+  const handler = () => callback(getLocalMonthlyNotes());
+  handler();
+  window.addEventListener(SYNC_EVENT, handler);
+  window.addEventListener(NOTES_SYNC_EVENT, handler);
+  window.addEventListener('storage', handler);
+  return () => {
+    window.removeEventListener(SYNC_EVENT, handler);
+    window.removeEventListener(NOTES_SYNC_EVENT, handler);
+    window.removeEventListener('storage', handler);
+  };
+}
+
+export async function saveMonthlyNote(month: string, userName: string, note: string): Promise<void> {
+  const name = userName.trim();
+  if (!name || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || note.length > 500) {
+    throw new Error('名前、対象月、備考の長さを確認してください');
+  }
+  const payload: MonthlyNote = {
+    id: `${month}_${name}`, month, userName: name, note, updatedAt: new Date().toISOString(),
+  };
+  if (isFirebaseConfigured && db) {
+    await setDoc(doc(db, 'monthlyNotes', payload.id), payload);
+    return;
+  }
+  const notes = getLocalMonthlyNotes().filter(item => item.id !== payload.id);
+  localStorage.setItem(STORAGE_KEYS.MONTHLY_NOTES, JSON.stringify([...notes, payload]));
+  window.dispatchEvent(new CustomEvent(NOTES_SYNC_EVENT));
 }
 
 // ユーザー名保存・取得

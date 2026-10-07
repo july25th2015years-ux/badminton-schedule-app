@@ -34,6 +34,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
   onEditEvent,
   onDeleteEvent,
 }) => {
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   if (!event) return null;
 
   // 出欠一覧カレンダーの回答（eventId & event.date の両方）から自動的に参加メンバーを集計
@@ -47,8 +48,6 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
       : timeSlot === 'afternoon'
       ? stats.afternoonAttendees.length
       : stats.totalAttendeesCount;
-
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   return (
     <div

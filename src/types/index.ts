@@ -1,5 +1,13 @@
 export type SlotStatus = 'circle' | 'triangle' | 'none';
 
+export interface MonthlyNote {
+  id: string;
+  month: string;
+  userName: string;
+  note: string;
+  updatedAt: string;
+}
+
 export interface Attendance {
   id: string; // `${eventId}_${userName}`
   eventId: string;

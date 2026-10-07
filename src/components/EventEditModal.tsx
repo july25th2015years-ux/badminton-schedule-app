@@ -34,8 +34,6 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
   onClose,
   onSaved,
 }) => {
-  if (!isOpen) return null;
-
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [date, setDate] = useState(initialDate || todayStr);
@@ -81,6 +79,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
     }
     setErrorMsg('');
   }, [editingEvent, initialDate, isOpen]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
