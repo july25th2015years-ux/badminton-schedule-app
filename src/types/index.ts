@@ -1,11 +1,22 @@
-export type AttendanceStatus = 'circle' | 'triangle';
+export type SlotStatus = 'circle' | 'triangle' | 'none';
 
 export interface Attendance {
-  id: string;
+  id: string; // `${eventId}_${userName}`
   eventId: string;
   userName: string;
-  status: AttendanceStatus;
-  condition?: string; // △の時は必須
+  
+  // 午前
+  morningStatus: SlotStatus;
+  morningCondition?: string; // △の時は必須
+  
+  // 午後
+  afternoonStatus: SlotStatus;
+  afternoonCondition?: string; // △の時は必須
+  
+  // 過去データとの互換性用
+  status?: 'circle' | 'triangle';
+  condition?: string;
+
   updatedAt: string;
 }
 
@@ -22,8 +33,19 @@ export interface PracticeEvent {
   updatedAt: string;
 }
 
+export interface AttendeeDetail {
+  userName: string;
+  status: 'circle' | 'triangle';
+  condition?: string;
+}
+
 export interface AttendanceStats {
-  circleCount: number;
-  triangleCount: number;
-  totalCount: number;
+  morningCircleCount: number;
+  morningTriangleCount: number;
+  afternoonCircleCount: number;
+  afternoonTriangleCount: number;
+  totalAttendeesCount: number; // 午前または午後に参加するユニーク人数
+  morningAttendees: AttendeeDetail[];
+  afternoonAttendees: AttendeeDetail[];
+  allAttendees: AttendeeDetail[];
 }

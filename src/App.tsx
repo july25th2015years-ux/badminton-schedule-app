@@ -10,6 +10,7 @@ import { CalendarView } from './components/CalendarView';
 import { MatrixView } from './components/MatrixView';
 import { EventDetailModal } from './components/EventDetailModal';
 import { EventEditModal } from './components/EventEditModal';
+import { NextEventBanner } from './components/NextEventBanner';
 import { FirebaseGuideModal } from './components/FirebaseGuideModal';
 import { Plus } from 'lucide-react';
 
@@ -120,6 +121,14 @@ export const App: React.FC = () => {
 
       {/* メインコンテンツエリア */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-4 py-4 sm:py-6">
+        {/* 次回開催予定カード（常時表示） */}
+        <NextEventBanner
+          events={events}
+          attendances={attendances}
+          onSelectEvent={(event) => setSelectedEventId(event.id)}
+          onOpenAddModal={() => handleOpenAddModal()}
+        />
+
         {viewMode === 'calendar' ? (
           <CalendarView
             year={currentYear}

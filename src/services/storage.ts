@@ -24,7 +24,7 @@ function getInitialSampleEvents(): PracticeEvent[] {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
 
-  // 来週末などの現実的な日程を2件生成
+  // 来週末などの日程を2件生成
   const day1 = Math.min(10, new Date(year, now.getMonth() + 1, 0).getDate());
   const day2 = Math.min(24, new Date(year, now.getMonth() + 1, 0).getDate());
 
@@ -65,37 +65,42 @@ function getInitialSampleAttendances(): Attendance[] {
       id: 'sample-event-1_田中',
       eventId: 'sample-event-1',
       userName: '田中',
-      status: 'circle',
+      morningStatus: 'circle',
+      afternoonStatus: 'circle',
       updatedAt: new Date().toISOString(),
     },
     {
       id: 'sample-event-1_佐藤',
       eventId: 'sample-event-1',
       userName: '佐藤',
-      status: 'triangle',
-      condition: '19:45から遅れて参加します',
+      morningStatus: 'triangle',
+      morningCondition: '10:00から合流',
+      afternoonStatus: 'circle',
       updatedAt: new Date().toISOString(),
     },
     {
       id: 'sample-event-1_鈴木',
       eventId: 'sample-event-1',
       userName: '鈴木',
-      status: 'circle',
+      morningStatus: 'circle',
+      afternoonStatus: 'none',
       updatedAt: new Date().toISOString(),
     },
     {
       id: 'sample-event-2_田中',
       eventId: 'sample-event-2',
       userName: '田中',
-      status: 'circle',
+      morningStatus: 'circle',
+      afternoonStatus: 'circle',
       updatedAt: new Date().toISOString(),
     },
     {
       id: 'sample-event-2_高橋',
       eventId: 'sample-event-2',
       userName: '高橋',
-      status: 'triangle',
-      condition: '20:15早退予定です',
+      morningStatus: 'none',
+      afternoonStatus: 'triangle',
+      afternoonCondition: '15:30早退予定',
       updatedAt: new Date().toISOString(),
     },
   ];
@@ -124,7 +129,15 @@ function getLocalAttendances(): Attendance[] {
     return samples;
   }
   try {
-    return JSON.parse(raw);
+    const list: Attendance[] = JSON.parse(raw);
+    // 既存データの正規化
+    return list.map(a => ({
+      ...a,
+      morningStatus: a.morningStatus || (a.status as any) || 'none',
+      afternoonStatus: a.afternoonStatus || (a.status as any) || 'none',
+      morningCondition: a.morningCondition || (a.status === 'triangle' ? a.condition : undefined),
+      afternoonCondition: a.afternoonCondition || (a.status === 'triangle' ? a.condition : undefined),
+    }));
   } catch {
     return [];
   }
@@ -191,7 +204,13 @@ export function subscribeToAttendances(callback: (attendances: Attendance[]) => 
     const unsubscribe = onSnapshot(attendancesRef, (snapshot) => {
       const list: Attendance[] = [];
       snapshot.forEach((doc) => {
-        list.push({ ...doc.data(), id: doc.id } as Attendance);
+        const data = doc.data() as Attendance;
+        list.push({
+          ...data,
+          id: doc.id,
+          morningStatus: data.morningStatus || (data.status as any) || 'none',
+          afternoonStatus: data.afternoonStatus || (data.status as any) || 'none',
+        });
       });
       callback(list);
     }, (err) => {
@@ -282,7 +301,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
 }
 
 /**
- * 出欠の保存（名前単位で登録・更新）
+ * 出欠の保存（午前・午後対応）
  */
 export async function saveAttendance(attData: Omit<Attendance, 'id' | 'updatedAt'>): Promise<void> {
   const id = `${attData.eventId}_${attData.userName.trim()}`;
@@ -308,6 +327,52 @@ export async function saveAttendance(attData: Omit<Attendance, 'id' | 'updatedAt
   } else {
     list.push(payload);
   }
+
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(list));
+  emitSync();
+}
+
+/**
+ * 複数イベントの出欠一括保存
+ */
+export async function saveBulkAttendances(attendances: Omit<Attendance, 'id' | 'updatedAt'>[]): Promise<void> {
+  if (attendances.length === 0) return;
+  const now = new Date().toISOString();
+
+  if (isFirebaseConfigured && db) {
+    const firestore = db;
+    const batch = writeBatch(firestore);
+    attendances.forEach(att => {
+      const id = `${att.eventId}_${att.userName.trim()}`;
+      const docRef = doc(firestore, 'attendances', id);
+      batch.set(docRef, {
+        ...att,
+        id,
+        userName: att.userName.trim(),
+        updatedAt: now,
+      }, { merge: true });
+    });
+    await batch.commit();
+    return;
+  }
+
+  // LocalStorage
+  const list = getLocalAttendances();
+  attendances.forEach(att => {
+    const id = `${att.eventId}_${att.userName.trim()}`;
+    const payload: Attendance = {
+      ...att,
+      id,
+      userName: att.userName.trim(),
+      updatedAt: now,
+    };
+    const idx = list.findIndex(a => a.eventId === att.eventId && a.userName === att.userName.trim());
+    if (idx >= 0) {
+      list[idx] = payload;
+    } else {
+      list.push(payload);
+    }
+  });
 
   localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(list));
   emitSync();

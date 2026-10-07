@@ -124,15 +124,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       {/* 出欠バッジ */}
                       <div className="flex items-center gap-1 mt-1">
                         <span className="inline-flex items-center text-[10px] sm:text-xs bg-emerald-600 text-white font-bold px-1.5 py-0.2 rounded leading-tight">
-                          ◯ {stats.circleCount}
+                          参加 {stats.totalAttendeesCount}人
                         </span>
-                        {stats.triangleCount > 0 && (
-                          <span className="inline-flex items-center text-[10px] sm:text-xs bg-amber-500 text-white font-bold px-1.5 py-0.2 rounded leading-tight">
-                            △ {stats.triangleCount}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-400 hidden sm:inline ml-auto font-medium">
-                          計{stats.totalCount}人
+                        <span className="text-[10px] text-slate-500 hidden sm:inline ml-auto font-medium">
+                          前:{stats.morningAttendees.length} 後:{stats.afternoonAttendees.length}
                         </span>
                       </div>
                     </div>

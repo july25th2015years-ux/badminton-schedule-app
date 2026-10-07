@@ -1,4 +1,4 @@
-import type { PracticeEvent, Attendance } from '../types';
+import type { PracticeEvent, Attendance, AttendanceStats, AttendeeDetail } from '../types';
 
 /**
  * Googleマップ検索URLを生成または取得
@@ -114,18 +114,85 @@ export function getCalendarGrid(year: number, month: number, events: PracticeEve
 }
 
 /**
- * 出欠集計
+ * 出欠集計（午前・午後対応 & 過去データ互換）
  */
-export function getEventAttendanceStats(attendances: Attendance[], eventId: string) {
+export function getEventAttendanceStats(attendances: Attendance[], eventId: string): AttendanceStats {
   const eventAttendances = attendances.filter(a => a.eventId === eventId);
-  const circles = eventAttendances.filter(a => a.status === 'circle');
-  const triangles = eventAttendances.filter(a => a.status === 'triangle');
+
+  const morningAttendees: AttendeeDetail[] = [];
+  const afternoonAttendees: AttendeeDetail[] = [];
+  const uniqueAttendeeNames = new Set<string>();
+
+  eventAttendances.forEach(att => {
+    // 過去データ（morningStatus未設定時）の互換処理
+    const mStatus = att.morningStatus || (att.status as any) || 'none';
+    const aStatus = att.afternoonStatus || (att.status as any) || 'none';
+    const mCond = att.morningCondition || att.condition;
+    const aCond = att.afternoonCondition || att.condition;
+
+    if (mStatus === 'circle' || mStatus === 'triangle') {
+      morningAttendees.push({
+        userName: att.userName,
+        status: mStatus,
+        condition: mCond,
+      });
+      uniqueAttendeeNames.add(att.userName);
+    }
+
+    if (aStatus === 'circle' || aStatus === 'triangle') {
+      afternoonAttendees.push({
+        userName: att.userName,
+        status: aStatus,
+        condition: aCond,
+      });
+      uniqueAttendeeNames.add(att.userName);
+    }
+  });
+
+  const morningCircleCount = morningAttendees.filter(a => a.status === 'circle').length;
+  const morningTriangleCount = morningAttendees.filter(a => a.status === 'triangle').length;
+  const afternoonCircleCount = afternoonAttendees.filter(a => a.status === 'circle').length;
+  const afternoonTriangleCount = afternoonAttendees.filter(a => a.status === 'triangle').length;
+
+  const allAttendees: AttendeeDetail[] = Array.from(uniqueAttendeeNames).map(name => {
+    const m = morningAttendees.find(a => a.userName === name);
+    const a = afternoonAttendees.find(a => a.userName === name);
+    // 代表ステータス
+    const isCircle = m?.status === 'circle' || a?.status === 'circle';
+    const condition = [
+      m?.condition ? `午前: ${m.condition}` : '',
+      a?.condition ? `午後: ${a.condition}` : ''
+    ].filter(Boolean).join(' / ');
+
+    return {
+      userName: name,
+      status: isCircle ? 'circle' : 'triangle',
+      condition: condition || undefined,
+    };
+  });
+
   return {
-    circleCount: circles.length,
-    triangleCount: triangles.length,
-    totalCount: eventAttendances.length,
-    circles,
-    triangles,
-    attendances: eventAttendances,
+    morningCircleCount,
+    morningTriangleCount,
+    afternoonCircleCount,
+    afternoonTriangleCount,
+    totalAttendeesCount: uniqueAttendeeNames.size,
+    morningAttendees,
+    afternoonAttendees,
+    allAttendees,
   };
+}
+
+/**
+ * 今日以降（本日含む）で最も直近の練習会を取得
+ */
+export function getNextUpcomingEvent(events: PracticeEvent[]): PracticeEvent | null {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const upcoming = events
+    .filter(e => e.date >= todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+
+  return upcoming.length > 0 ? upcoming[0] : null;
 }
