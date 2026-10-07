@@ -114,16 +114,44 @@ export function getCalendarGrid(year: number, month: number, events: PracticeEve
 }
 
 /**
- * 出欠集計（午前・午後対応 & 過去データ互換）
+ * 出欠集計（午前・午後対応 & 過去データ互換 & 日付直接紐付け対応）
  */
-export function getEventAttendanceStats(attendances: Attendance[], eventId: string): AttendanceStats {
-  const eventAttendances = attendances.filter(a => a.eventId === eventId);
+export function getEventAttendanceStats(
+  attendances: Attendance[],
+  eventId: string,
+  eventDate?: string
+): AttendanceStats {
+  const relevantIds = [eventId];
+  if (eventDate && !relevantIds.includes(eventDate)) {
+    relevantIds.push(eventDate);
+  }
+
+  const eventAttendances = attendances.filter(a => relevantIds.includes(a.eventId));
 
   const morningAttendees: AttendeeDetail[] = [];
   const afternoonAttendees: AttendeeDetail[] = [];
   const uniqueAttendeeNames = new Set<string>();
 
+  // ユーザー名ごとにまとめる（eventIdとeventDateの重複登録対策）
+  const userMap = new Map<string, Attendance>();
   eventAttendances.forEach(att => {
+    const key = att.userName?.trim().toLowerCase();
+    if (!key) return;
+    const existing = userMap.get(key);
+    if (!existing) {
+      userMap.set(key, att);
+    } else {
+      userMap.set(key, {
+        ...existing,
+        morningStatus: (att.morningStatus && att.morningStatus !== 'none') ? att.morningStatus : existing.morningStatus,
+        morningCondition: att.morningCondition || existing.morningCondition,
+        afternoonStatus: (att.afternoonStatus && att.afternoonStatus !== 'none') ? att.afternoonStatus : existing.afternoonStatus,
+        afternoonCondition: att.afternoonCondition || existing.afternoonCondition,
+      });
+    }
+  });
+
+  Array.from(userMap.values()).forEach(att => {
     // 過去データ（morningStatus未設定時）の互換処理
     const mStatus = att.morningStatus || (att.status as any) || 'none';
     const aStatus = att.afternoonStatus || (att.status as any) || 'none';

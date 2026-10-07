@@ -46,7 +46,7 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
     );
   }
 
-  const stats = getEventAttendanceStats(attendances, nextEvent.id);
+  const stats = getEventAttendanceStats(attendances, nextEvent.id, nextEvent.date);
   const mapUrl = getGoogleMapsUrl(nextEvent.location, nextEvent.mapUrl);
 
   return (
