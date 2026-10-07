@@ -224,12 +224,51 @@ export function setStoredUserName(name: string): void {
 }
 
 /**
+ * Firestoreはundefinedを受け付けないため、undefined値を除外する
+ */
+function cleanForFirestore<T extends Record<string, any>>(obj: T): Partial<T> {
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+let isInitialSeedDone = false;
+async function seedInitialFirestoreData() {
+  if (isInitialSeedDone || !isFirebaseConfigured || !db) return;
+  isInitialSeedDone = true;
+  const firestore = db;
+  try {
+    const sampleEvents = getInitialSampleEvents();
+    const sampleAttendances = getInitialSampleAttendances();
+    const batch = writeBatch(firestore);
+    sampleEvents.forEach(ev => {
+      const docRef = doc(firestore, 'events', ev.id);
+      batch.set(docRef, cleanForFirestore(ev), { merge: true });
+    });
+    sampleAttendances.forEach(att => {
+      const docRef = doc(firestore, 'attendances', att.id);
+      batch.set(docRef, cleanForFirestore(att), { merge: true });
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('Failed to seed initial Firestore data:', err);
+  }
+}
+
+/**
  * 練習会イベントの一覧購読
  */
 export function subscribeToEvents(callback: (events: PracticeEvent[]) => void): () => void {
   if (isFirebaseConfigured && db) {
     const eventsRef = collection(db, 'events');
     const unsubscribe = onSnapshot(eventsRef, (snapshot) => {
+      if (snapshot.empty) {
+        seedInitialFirestoreData();
+      }
       const list: PracticeEvent[] = [];
       snapshot.forEach((doc) => {
         list.push({ ...doc.data(), id: doc.id } as PracticeEvent);
@@ -309,11 +348,11 @@ export async function saveEvent(eventData: Omit<PracticeEvent, 'id' | 'createdAt
 
   if (isFirebaseConfigured && db) {
     const docRef = doc(db, 'events', eventId);
-    await setDoc(docRef, {
+    await setDoc(docRef, cleanForFirestore({
       ...eventData,
       createdAt: now,
       updatedAt: now,
-    }, { merge: true });
+    }), { merge: true });
     return eventId;
   }
 
@@ -380,7 +419,7 @@ export async function saveAttendance(attData: Omit<Attendance, 'id' | 'updatedAt
 
   if (isFirebaseConfigured && db) {
     const docRef = doc(db, 'attendances', id);
-    await setDoc(docRef, payload, { merge: true });
+    await setDoc(docRef, cleanForFirestore(payload), { merge: true });
     return;
   }
 
@@ -410,12 +449,12 @@ export async function saveBulkAttendances(attendances: Omit<Attendance, 'id' | '
     attendances.forEach(att => {
       const id = `${att.eventId}_${att.userName.trim()}`;
       const docRef = doc(firestore, 'attendances', id);
-      batch.set(docRef, {
+      batch.set(docRef, cleanForFirestore({
         ...att,
         id,
         userName: att.userName.trim(),
         updatedAt: now,
-      }, { merge: true });
+      }), { merge: true });
     });
     await batch.commit();
     return;
@@ -504,7 +543,7 @@ export async function saveUserMonthBulkAttendances(
     // 2. 有効な出席データを新規書き込み
     validAttendances.forEach(att => {
       const docRef = doc(firestore, 'attendances', att.id);
-      batch.set(docRef, att);
+      batch.set(docRef, cleanForFirestore(att));
     });
 
     await batch.commit();
