@@ -16,7 +16,7 @@ import {
   Award,
   Pencil
 } from 'lucide-react';
-import { getStoredUserName, setStoredUserName, saveBulkAttendances } from '../services/storage';
+import { getStoredUserName, setStoredUserName, saveUserMonthBulkAttendances } from '../services/storage';
 
 interface MatrixViewProps {
   year: number;
@@ -84,6 +84,14 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     }
   }, [year, month, attendances]);
 
+  // 特定ユーザーの最新出欠を取得するヘルパー（重複時も最新を確実に取得）
+  const getLatestUserAttendance = (relevantIds: string[], targetName: string) => {
+    const list = attendances.filter(
+      a => relevantIds.includes(a.eventId) && a.userName.trim().toLowerCase() === targetName.trim().toLowerCase()
+    );
+    return list.length > 0 ? list[list.length - 1] : null;
+  };
+
   const loadUserSlots = (name: string) => {
     const slots: { [dateStr: string]: DraftSlot } = {};
     const trimmed = name.trim().toLowerCase();
@@ -93,9 +101,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
       const relevantIds = [day.date];
       if (event) relevantIds.push(event.id);
 
-      const existing = trimmed ? attendances.find(
-        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === trimmed
-      ) : null;
+      const existing = trimmed ? getLatestUserAttendance(relevantIds, trimmed) : null;
 
       if (existing) {
         slots[day.date] = {
@@ -293,25 +299,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     setErrorMsg('');
 
     try {
-      const payload: Omit<Attendance, 'id' | 'updatedAt'>[] = [];
-      daysList.forEach(day => {
-        const slot = draftSlots[day.date];
-        if (slot && (slot.morningStatus !== 'none' || slot.afternoonStatus !== 'none')) {
-          const event = events.find(e => e.date === day.date);
-          const targetId = event ? event.id : day.date;
+      await saveUserMonthBulkAttendances(
+        trimmedName,
+        daysList,
+        events,
+        draftSlots
+      );
 
-          payload.push({
-            eventId: targetId,
-            userName: trimmedName,
-            morningStatus: slot.morningStatus,
-            morningCondition: slot.morningStatus === 'triangle' ? slot.morningCondition.trim() : undefined,
-            afternoonStatus: slot.afternoonStatus,
-            afternoonCondition: slot.afternoonStatus === 'triangle' ? slot.afternoonCondition.trim() : undefined,
-          });
-        }
-      });
-
-      await saveBulkAttendances(payload);
       setStoredUserName(trimmedName);
       setSaveSuccessMsg(`${trimmedName} さんの出欠を保存しました！下の表に反映されました。`);
       setTimeout(() => setSaveSuccessMsg(''), 4000);
@@ -335,31 +329,28 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     const relevantIds = [dateStr];
     if (dayEvent) relevantIds.push(dayEvent.id);
 
-    // ヨッシーの出欠
-    const yosshyAtt = attendances.find(
+    // ヨッシーの出欠（最新レコード）
+    const yosshyAttList = attendances.filter(
       a => relevantIds.includes(a.eventId) && isYosshyName(a.userName)
     );
+    const yosshyAtt = yosshyAttList.length > 0 ? yosshyAttList[yosshyAttList.length - 1] : null;
     const yosshyM = yosshyAtt?.morningStatus || (yosshyAtt?.status as any) || 'none';
     const yosshyA = yosshyAtt?.afternoonStatus || (yosshyAtt?.status as any) || 'none';
     const isYosshyMorning = yosshyM === 'circle' || yosshyM === 'triangle';
     const isYosshyAfternoon = yosshyA === 'circle' || yosshyA === 'triangle';
 
-    // ヨッシー以外の午前参加可能者数（午前が◯または△）
+    // ヨッシー以外の午前参加可能者数（午前が◯または△、最新レコードで判定）
     const otherMorningCount = allUserNames.filter(name => {
       if (isYosshyName(name)) return false;
-      const att = attendances.find(
-        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
-      );
+      const att = getLatestUserAttendance(relevantIds, name);
       const m = att?.morningStatus || (att?.status as any) || 'none';
       return m === 'circle' || m === 'triangle';
     }).length;
 
-    // ヨッシー以外の午後参加可能者数（午後が◯または△）
+    // ヨッシー以外の午後参加可能者数（午後が◯または△、最新レコードで判定）
     const otherAfternoonCount = allUserNames.filter(name => {
       if (isYosshyName(name)) return false;
-      const att = attendances.find(
-        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
-      );
+      const att = getLatestUserAttendance(relevantIds, name);
       const a = att?.afternoonStatus || (att?.status as any) || 'none';
       return a === 'circle' || a === 'triangle';
     }).length;
@@ -966,9 +957,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                       const relevantIds = [day.date];
                       if (dayEvent) relevantIds.push(dayEvent.id);
 
-                      const att = attendances.find(
-                        a => relevantIds.includes(a.eventId) && a.userName.toLowerCase() === name.toLowerCase()
-                      );
+                      const att = getLatestUserAttendance(relevantIds, name);
 
                       const mStatus = att?.morningStatus || (att?.status as any) || 'none';
                       const aStatus = att?.afternoonStatus || (att?.status as any) || 'none';

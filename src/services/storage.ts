@@ -10,7 +10,7 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
-import type { PracticeEvent, Attendance } from '../types';
+import type { PracticeEvent, Attendance, SlotStatus } from '../types';
 
 const STORAGE_KEYS = {
   EVENTS: 'badminton_events',
@@ -385,6 +385,89 @@ export async function saveBulkAttendances(attendances: Omit<Attendance, 'id' | '
   });
 
   localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(list));
+  emitSync();
+}
+
+/**
+ * 特定ユーザーの当月全日程に対する出欠を一括保存・更新（削除・変更の完全同期）
+ * @param userName 対象ユーザー名
+ * @param targetDays 当月の全日程情報
+ * @param events 登録済みのイベント一覧
+ * @param slotsMap 各日付の出欠入力スロット
+ */
+export async function saveUserMonthBulkAttendances(
+  userName: string,
+  targetDays: { date: string }[],
+  events: PracticeEvent[],
+  slotsMap: { [dateStr: string]: { morningStatus: SlotStatus; morningCondition: string; afternoonStatus: SlotStatus; afternoonCondition: string } }
+): Promise<void> {
+  const trimmedName = userName.trim();
+  if (!trimmedName) return;
+
+  const now = new Date().toISOString();
+
+  // 対象月に含まれるすべての関連イベントID（日付文字列 & 登録済みイベントID）
+  const allTargetEventIds = new Set<string>();
+  targetDays.forEach(day => {
+    allTargetEventIds.add(day.date);
+    const ev = events.find(e => e.date === day.date);
+    if (ev) allTargetEventIds.add(ev.id);
+  });
+
+  // 有効な（◯または△がある）新規保存用リスト
+  const validAttendances: Attendance[] = [];
+  targetDays.forEach(day => {
+    const slot = slotsMap[day.date];
+    if (slot && (slot.morningStatus !== 'none' || slot.afternoonStatus !== 'none')) {
+      const ev = events.find(e => e.date === day.date);
+      const targetId = ev ? ev.id : day.date;
+      const id = `${targetId}_${trimmedName}`;
+      validAttendances.push({
+        id,
+        eventId: targetId,
+        userName: trimmedName,
+        morningStatus: slot.morningStatus,
+        morningCondition: slot.morningStatus === 'triangle' ? slot.morningCondition.trim() : undefined,
+        afternoonStatus: slot.afternoonStatus,
+        afternoonCondition: slot.afternoonStatus === 'triangle' ? slot.afternoonCondition.trim() : undefined,
+        updatedAt: now,
+      });
+    }
+  });
+
+  if (isFirebaseConfigured && db) {
+    const firestore = db;
+    const batch = writeBatch(firestore);
+
+    // 1. このユーザーの該当月関連ドキュメントをすべて削除
+    allTargetEventIds.forEach(targetId => {
+      const docId = `${targetId}_${trimmedName}`;
+      const docRef = doc(firestore, 'attendances', docId);
+      batch.delete(docRef);
+    });
+
+    // 2. 有効な出席データを新規書き込み
+    validAttendances.forEach(att => {
+      const docRef = doc(firestore, 'attendances', att.id);
+      batch.set(docRef, att);
+    });
+
+    await batch.commit();
+    return;
+  }
+
+  // LocalStorage モード
+  const currentList = getLocalAttendances();
+  // このユーザーかつ該当月に関連する全レコードを除外（削除・変更の完全反映）
+  const filtered = currentList.filter(a => {
+    const isSameUser = a.userName.trim().toLowerCase() === trimmedName.toLowerCase();
+    const isTargetMonth = allTargetEventIds.has(a.eventId);
+    return !(isSameUser && isTargetMonth);
+  });
+
+  // 有効な新しい出欠レコードを追加
+  const updatedList = [...filtered, ...validAttendances];
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(updatedList));
   emitSync();
 }
 
