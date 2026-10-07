@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PracticeEvent, Attendance, SlotStatus } from '../types';
 import {
   formatDateJa,
@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Save,
   Plus,
-  Award
+  Award,
+  Pencil
 } from 'lucide-react';
 import { getStoredUserName, setStoredUserName, saveBulkAttendances } from '../services/storage';
 
@@ -57,10 +58,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   ).sort((a, b) => a.localeCompare(b, 'ja'));
 
   // --- ポチポチ一括入力用の状態 ---
+  const inputCardRef = useRef<HTMLDivElement>(null);
   const [userName, setUserName] = useState('');
   const [draftSlots, setDraftSlots] = useState<{ [dateStr: string]: DraftSlot }>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [editingUserNotice, setEditingUserNotice] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   // ユーザー名の復元と初期スロット設定
@@ -110,6 +113,18 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     setUserName(name);
     setErrorMsg('');
     loadUserSlots(name);
+  };
+
+  // 表の名前をクリックして再編集モードに切り替え
+  const handleSelectUserToEdit = (name: string) => {
+    handleNameChange(name);
+    setEditingUserNotice(`${name} さんの出欠回答を呼び出しました。カレンダーで修正し、下の［この内容で出欠を一括保存する］を押してください。`);
+    if (inputCardRef.current) {
+      inputCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    setTimeout(() => {
+      setEditingUserNotice('');
+    }, 7000);
   };
 
   const todayObj = new Date();
@@ -297,7 +312,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   return (
     <div className="space-y-5">
       {/* 1. ポチポチ出欠一括入力カード（その月の全日程1日〜末日） */}
-      <div className="bg-white rounded-2xl shadow-sm border-2 border-emerald-500/30 overflow-hidden">
+      <div ref={inputCardRef} className="bg-white rounded-2xl shadow-sm border-2 border-emerald-500/30 overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 px-4 py-3.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-2.5">
             <span className="text-xl">✍️</span>
@@ -370,20 +385,35 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             </div>
           )}
 
+          {editingUserNotice && (
+            <div className="bg-sky-50 border border-sky-300 p-3 rounded-xl text-xs font-semibold text-sky-900 flex items-center space-x-2 animate-in fade-in">
+              <Pencil className="w-4 h-4 text-sky-600 shrink-0" />
+              <span>{editingUserNotice}</span>
+            </div>
+          )}
+
           {/* お名前入力欄 */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 pb-3 border-b border-slate-100 bg-slate-50 p-3 rounded-xl">
             <label className="text-xs font-bold text-slate-800 sm:w-28 shrink-0">
               あなたのお名前 <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="text"
-              value={userName}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="例: 田中、サトウ、ヨッシー"
-              className="text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 max-w-sm font-semibold"
-            />
+            <div className="flex items-center space-x-2 flex-1 max-w-sm">
+              <input
+                type="text"
+                value={userName}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="例: 田中、サトウ、ヨッシー"
+                className="text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full font-semibold"
+              />
+              {userName && allUserNames.some(n => n.toLowerCase() === userName.trim().toLowerCase()) && (
+                <span className="shrink-0 inline-flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                  <Pencil className="w-3 h-3 text-emerald-600" />
+                  <span>修正中</span>
+                </span>
+              )}
+            </div>
             <span className="text-xs text-slate-500">
-              （入力すると過去に回答した内容が自動復元されます）
+              （入力または下の名前クリックで過去の回答を復元）
             </span>
           </div>
 
@@ -607,7 +637,10 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
               <span>📊 {year}年{month}月 メンバー出欠確認・日程調整表</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              1日〜月末までの全日程の参加希望人数が集計されています。人数が多い日を選んで開催できます！
+              1日〜月末までの全日程の参加希望人数が集計されています。
+              <span className="text-emerald-700 font-semibold ml-1.5 inline-block">
+                💡 お名前をクリックすると出欠を再度修正できます
+              </span>
             </p>
           </div>
           <div className="flex items-center space-x-2 text-xs text-slate-600">
@@ -636,16 +669,37 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                 <th className="py-2.5 px-3 min-w-[170px] font-semibold text-slate-600">
                   開催設定（場所・時間）
                 </th>
-                {allUserNames.map((name) => (
-                  <th
-                    key={name}
-                    className="py-2.5 px-2 text-center min-w-[95px] font-bold text-slate-800 border-l border-slate-200"
-                  >
-                    <span className="truncate block max-w-[85px] mx-auto" title={name}>
-                      {name}
-                    </span>
-                  </th>
-                ))}
+                {allUserNames.map((name) => {
+                  const isCurrent = userName.trim().toLowerCase() === name.toLowerCase();
+                  return (
+                    <th
+                      key={name}
+                      className={`py-2 px-1 text-center min-w-[100px] font-bold border-l border-slate-200 transition ${
+                        isCurrent ? 'bg-emerald-50' : ''
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectUserToEdit(name)}
+                        className={`group/btn inline-flex items-center justify-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold transition mx-auto shadow-2xs ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                            : 'bg-white hover:bg-emerald-50 text-slate-800 hover:text-emerald-700 border border-slate-300 hover:border-emerald-400'
+                        }`}
+                        title={`${name} さんの出欠を再修正する（クリックでフォームに呼び出し）`}
+                      >
+                        <span className="truncate max-w-[70px]">{name}</span>
+                        <Pencil
+                          className={`w-3 h-3 shrink-0 ${
+                            isCurrent
+                              ? 'text-white'
+                              : 'text-slate-400 group-hover/btn:text-emerald-600'
+                          }`}
+                        />
+                      </button>
+                    </th>
+                  );
+                })}
                 {allUserNames.length === 0 && (
                   <th className="py-2.5 px-4 text-center text-slate-400 font-normal">
                     上のフォームから最初のお名前と出欠を登録してください🏸
