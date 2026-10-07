@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PracticeEvent, Attendance } from '../types';
-import { getCalendarGrid, WEEKDAYS_JA, getEventAttendanceStats } from '../utils/helpers';
+import { getCalendarGrid, WEEKDAYS_JA, getEventAttendanceStats, getEventTimeSlot } from '../utils/helpers';
 import { MapPin, Clock, Plus } from 'lucide-react';
 
 interface CalendarViewProps {
@@ -98,7 +98,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               {/* イベント一覧 */}
               <div className="space-y-1 flex-1 flex flex-col justify-start">
                 {day.events.map((event) => {
-                  const stats = getEventAttendanceStats(attendances, event.id);
+                  const stats = getEventAttendanceStats(attendances, event.id, event.date);
+                  const timeSlot = getEventTimeSlot(event.startTime, event.endTime);
+                  const attendeeCount =
+                    timeSlot === 'morning'
+                      ? stats.morningAttendees.length
+                      : timeSlot === 'afternoon'
+                      ? stats.afternoonAttendees.length
+                      : stats.totalAttendeesCount;
 
                   return (
                     <div
@@ -124,11 +131,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       {/* 出欠バッジ */}
                       <div className="flex items-center gap-1 mt-1">
                         <span className="inline-flex items-center text-[10px] sm:text-xs bg-emerald-600 text-white font-bold px-1.5 py-0.2 rounded leading-tight">
-                          参加 {stats.totalAttendeesCount}人
+                          {timeSlot === 'morning' ? '午前 ' : timeSlot === 'afternoon' ? '午後 ' : ''}参加 {attendeeCount}人
                         </span>
-                        <span className="text-[10px] text-slate-500 hidden sm:inline ml-auto font-medium">
-                          前:{stats.morningAttendees.length} 後:{stats.afternoonAttendees.length}
-                        </span>
+                        {timeSlot === 'allDay' && (
+                          <span className="text-[10px] text-slate-500 hidden sm:inline ml-auto font-medium">
+                            前:{stats.morningAttendees.length} 後:{stats.afternoonAttendees.length}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

@@ -286,3 +286,33 @@ export function getDateAttendanceStats(
   return getEventAttendanceStats(normalizedAttendances, dateStr);
 }
 
+export type EventTimeSlot = 'morning' | 'afternoon' | 'allDay';
+
+/**
+ * 開催時間（HH:mm）から午前・午後・終日（跨ぎ）を判定
+ */
+export function getEventTimeSlot(startTime?: string, endTime?: string): EventTimeSlot {
+  if (!startTime) return 'allDay';
+  const startHour = parseInt(startTime.split(':')[0], 10) || 0;
+  const startMin = parseInt(startTime.split(':')[1] || '0', 10) || 0;
+  const startTotalMin = startHour * 60 + startMin;
+
+  const endHour = endTime ? parseInt(endTime.split(':')[0], 10) || 0 : startHour + 2;
+  const endMin = endTime ? parseInt(endTime.split(':')[1] || '0', 10) || 0 : 0;
+  const endTotalMin = endHour * 60 + endMin;
+
+  // 終了時間が12:30以下なら午前中開催
+  if (endTotalMin <= 12 * 60 + 30) {
+    return 'morning';
+  }
+
+  // 開始時間が12:00以降なら午後開催
+  if (startTotalMin >= 12 * 60) {
+    return 'afternoon';
+  }
+
+  // 午前から始まり午後まで跨ぐ場合
+  return 'allDay';
+}
+
+

@@ -3,7 +3,8 @@ import type { PracticeEvent, Attendance } from '../types';
 import {
   formatDateJa,
   getGoogleMapsUrl,
-  getEventAttendanceStats
+  getEventAttendanceStats,
+  getEventTimeSlot
 } from '../utils/helpers';
 import {
   X,
@@ -37,7 +38,15 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
   // 出欠一覧カレンダーの回答（eventId & event.date の両方）から自動的に参加メンバーを集計
   const stats = getEventAttendanceStats(attendances, event.id, event.date);
+  const timeSlot = getEventTimeSlot(event.startTime, event.endTime);
   const mapUrl = getGoogleMapsUrl(event.location, event.mapUrl);
+
+  const attendeeCount =
+    timeSlot === 'morning'
+      ? stats.morningAttendees.length
+      : timeSlot === 'afternoon'
+      ? stats.afternoonAttendees.length
+      : stats.totalAttendeesCount;
 
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -164,93 +173,103 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-1.5 text-slate-800 font-bold text-sm">
                 <Users className="w-4 h-4 text-emerald-600" />
-                <span>参加予定メンバー</span>
+                <span>参加予定メンバー {timeSlot === 'morning' ? '(午前)' : timeSlot === 'afternoon' ? '(午後)' : ''}</span>
                 <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full ml-1">
-                  計 {stats.totalAttendeesCount}名
+                  計 {attendeeCount}名
                 </span>
               </div>
             </div>
 
-            {stats.totalAttendeesCount === 0 ? (
+            {attendeeCount === 0 ? (
               <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-500 space-y-1">
-                <p className="font-medium">まだ参加予定者がいません</p>
+                <p className="font-medium">
+                  {timeSlot === 'morning'
+                    ? '午前の参加予定者がまだいません'
+                    : timeSlot === 'afternoon'
+                    ? '午後の参加予定者がまだいません'
+                    : 'まだ参加予定者がいません'}
+                </p>
                 <p className="text-[11px] text-slate-400">
                   出欠一覧タブのカレンダーで各自回答（◯・△）すると自動的にここに反映されます🏸
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* 午前参加枠 */}
-                <div className="bg-amber-50/50 border border-amber-200/80 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center justify-between border-b border-amber-200/60 pb-1.5">
-                    <span className="text-xs font-bold text-amber-900 flex items-center space-x-1">
-                      <Sun className="w-3.5 h-3.5 text-amber-600" />
-                      <span>午前 ({stats.morningAttendees.length}名)</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded">
-                      ◯ {stats.morningCircleCount} / △ {stats.morningTriangleCount}
-                    </span>
-                  </div>
-                  {stats.morningAttendees.length === 0 ? (
-                    <div className="text-[11px] text-slate-400 py-1.5 text-center">午前の参加者はいません</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {stats.morningAttendees.map((m) => (
-                        <div
-                          key={'m_' + m.userName}
-                          className="text-xs flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-amber-200/70 shadow-2xs"
-                        >
-                          <span className="font-bold text-slate-800">{m.userName}</span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              m.status === 'circle'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-amber-100 text-amber-900 border border-amber-300'
-                            }`}
-                          >
-                            {m.status === 'circle' ? '◯ 参加' : `△ ${m.condition || '条件付き'}`}
-                          </span>
-                        </div>
-                      ))}
+              <div className={`grid gap-2.5 ${timeSlot === 'allDay' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                {/* 午前参加枠（timeSlotがafternoonでない場合に表示） */}
+                {timeSlot !== 'afternoon' && (
+                  <div className="bg-amber-50/50 border border-amber-200/80 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-amber-200/60 pb-1.5">
+                      <span className="text-xs font-bold text-amber-900 flex items-center space-x-1">
+                        <Sun className="w-3.5 h-3.5 text-amber-600" />
+                        <span>午前 ({stats.morningAttendees.length}名)</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                        ◯ {stats.morningCircleCount} / △ {stats.morningTriangleCount}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    {stats.morningAttendees.length === 0 ? (
+                      <div className="text-[11px] text-slate-400 py-1.5 text-center">午前の参加者はいません</div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {stats.morningAttendees.map((m) => (
+                          <div
+                            key={'m_' + m.userName}
+                            className="text-xs flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-amber-200/70 shadow-2xs"
+                          >
+                            <span className="font-bold text-slate-800">{m.userName}</span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                m.status === 'circle'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}
+                            >
+                              {m.status === 'circle' ? '◯ 参加' : `△ ${m.condition || '条件付き'}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                {/* 午後参加枠 */}
-                <div className="bg-teal-50/50 border border-teal-200/80 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center justify-between border-b border-teal-200/60 pb-1.5">
-                    <span className="text-xs font-bold text-teal-900 flex items-center space-x-1">
-                      <Moon className="w-3.5 h-3.5 text-teal-600" />
-                      <span>午後 ({stats.afternoonAttendees.length}名)</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-teal-800 bg-teal-100/80 px-1.5 py-0.5 rounded">
-                      ◯ {stats.afternoonCircleCount} / △ {stats.afternoonTriangleCount}
-                    </span>
-                  </div>
-                  {stats.afternoonAttendees.length === 0 ? (
-                    <div className="text-[11px] text-slate-400 py-1.5 text-center">午後の参加者はいません</div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {stats.afternoonAttendees.map((a) => (
-                        <div
-                          key={'a_' + a.userName}
-                          className="text-xs flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-teal-200/70 shadow-2xs"
-                        >
-                          <span className="font-bold text-slate-800">{a.userName}</span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              a.status === 'circle'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-amber-100 text-amber-900 border border-amber-300'
-                            }`}
-                          >
-                            {a.status === 'circle' ? '◯ 参加' : `△ ${a.condition || '条件付き'}`}
-                          </span>
-                        </div>
-                      ))}
+                {/* 午後参加枠（timeSlotがmorningでない場合に表示） */}
+                {timeSlot !== 'morning' && (
+                  <div className="bg-teal-50/50 border border-teal-200/80 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-teal-200/60 pb-1.5">
+                      <span className="text-xs font-bold text-teal-900 flex items-center space-x-1">
+                        <Moon className="w-3.5 h-3.5 text-teal-600" />
+                        <span>午後 ({stats.afternoonAttendees.length}名)</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-teal-800 bg-teal-100/80 px-1.5 py-0.5 rounded">
+                        ◯ {stats.afternoonCircleCount} / △ {stats.afternoonTriangleCount}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    {stats.afternoonAttendees.length === 0 ? (
+                      <div className="text-[11px] text-slate-400 py-1.5 text-center">午後の参加者はいません</div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {stats.afternoonAttendees.map((a) => (
+                          <div
+                            key={'a_' + a.userName}
+                            className="text-xs flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-teal-200/70 shadow-2xs"
+                          >
+                            <span className="font-bold text-slate-800">{a.userName}</span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                a.status === 'circle'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}
+                            >
+                              {a.status === 'circle' ? '◯ 参加' : `△ ${a.condition || '条件付き'}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

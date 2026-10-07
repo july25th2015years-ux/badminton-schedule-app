@@ -4,7 +4,8 @@ import {
   formatDateJa,
   getGoogleMapsUrl,
   getEventAttendanceStats,
-  getNextUpcomingEvent
+  getNextUpcomingEvent,
+  getEventTimeSlot
 } from '../utils/helpers';
 import { Clock, MapPin, ExternalLink, Calendar, Plus, ChevronRight, UserCheck } from 'lucide-react';
 
@@ -47,7 +48,15 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
   }
 
   const stats = getEventAttendanceStats(attendances, nextEvent.id, nextEvent.date);
+  const timeSlot = getEventTimeSlot(nextEvent.startTime, nextEvent.endTime);
   const mapUrl = getGoogleMapsUrl(nextEvent.location, nextEvent.mapUrl);
+
+  const attendeeCount =
+    timeSlot === 'morning'
+      ? stats.morningAttendees.length
+      : timeSlot === 'afternoon'
+      ? stats.afternoonAttendees.length
+      : stats.totalAttendeesCount;
 
   return (
     <div className="mb-4 bg-gradient-to-r from-emerald-700 to-teal-800 rounded-2xl shadow-sm text-white p-3.5 sm:p-4.5 transition-all">
@@ -60,7 +69,7 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
               <span>次回の練習予定</span>
             </span>
             <span className="text-xs text-emerald-100 font-medium">
-              参加予定: 計{stats.totalAttendeesCount}名
+              参加予定: {timeSlot === 'morning' ? '午前 ' : timeSlot === 'afternoon' ? '午後 ' : '計'}{attendeeCount}名
             </span>
           </div>
 
@@ -102,23 +111,33 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-emerald-100 flex items-center space-x-1">
               <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
-              <span>参加予定メンバー</span>
+              <span>参加予定メンバー {timeSlot === 'morning' ? '(午前)' : timeSlot === 'afternoon' ? '(午後)' : ''}</span>
             </span>
             <span className="text-[10px] text-emerald-200">
-              前: {stats.morningAttendees.length}名 / 後: {stats.afternoonAttendees.length}名
+              {timeSlot === 'morning'
+                ? `計 ${stats.morningAttendees.length}名`
+                : timeSlot === 'afternoon'
+                ? `計 ${stats.afternoonAttendees.length}名`
+                : `前: ${stats.morningAttendees.length}名 / 後: ${stats.afternoonAttendees.length}名`}
             </span>
           </div>
 
-          {stats.totalAttendeesCount === 0 ? (
+          {attendeeCount === 0 ? (
             <div className="text-xs text-emerald-200/80 py-1">
-              まだ参加登録がありません。出欠を登録しましょう！
+              {timeSlot === 'morning'
+                ? '午前の参加登録がまだありません。出欠を登録しましょう！'
+                : timeSlot === 'afternoon'
+                ? '午後の参加登録がまだありません。出欠を登録しましょう！'
+                : 'まだ参加登録がありません。出欠を登録しましょう！'}
             </div>
           ) : (
             <div className="space-y-1.5">
-              {/* 午前参加者 */}
-              {stats.morningAttendees.length > 0 && (
+              {/* 午前枠：午後限定開催でない場合に表示 */}
+              {timeSlot !== 'afternoon' && stats.morningAttendees.length > 0 && (
                 <div className="text-[11px] flex items-start space-x-1.5">
-                  <span className="shrink-0 font-bold text-emerald-200 bg-white/10 px-1 rounded text-[10px]">午前</span>
+                  <span className="shrink-0 font-bold text-emerald-200 bg-white/10 px-1 rounded text-[10px]">
+                    {timeSlot === 'allDay' ? '午前' : '参加'}
+                  </span>
                   <div className="flex flex-wrap gap-1 items-center">
                     {stats.morningAttendees.map(m => (
                       <span
@@ -133,10 +152,12 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
                 </div>
               )}
 
-              {/* 午後参加者 */}
-              {stats.afternoonAttendees.length > 0 && (
+              {/* 午後枠：午前限定開催でない場合に表示 */}
+              {timeSlot !== 'morning' && stats.afternoonAttendees.length > 0 && (
                 <div className="text-[11px] flex items-start space-x-1.5">
-                  <span className="shrink-0 font-bold text-teal-200 bg-white/10 px-1 rounded text-[10px]">午後</span>
+                  <span className="shrink-0 font-bold text-teal-200 bg-white/10 px-1 rounded text-[10px]">
+                    {timeSlot === 'allDay' ? '午後' : '参加'}
+                  </span>
                   <div className="flex flex-wrap gap-1 items-center">
                     {stats.afternoonAttendees.map(a => (
                       <span
