@@ -3,11 +3,11 @@ import type { PracticeEvent, Attendance, SlotStatus } from '../types';
 import {
   formatDateJa,
   getMonthDaysList,
-  getDateAttendanceStats
+  getDateAttendanceStats,
+  getCalendarGrid,
+  WEEKDAYS_JA
 } from '../utils/helpers';
 import {
-  Sun,
-  Moon,
   Sparkles,
   Check,
   AlertCircle,
@@ -43,6 +43,9 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 }) => {
   // その月の1日〜末日までの全日程リスト（30日または31日分）
   const daysList = getMonthDaysList(year, month);
+
+  // カレンダー形式表示用のグリッド（日曜始まり7列、前月・翌月パディングを含む）
+  const calendarDays = getCalendarGrid(year, month, events);
 
   // 全参加者名のユニークリスト（名前順）
   const allUserNames = Array.from(
@@ -371,133 +374,210 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             </span>
           </div>
 
-          {/* 1日〜月末の全日程ボタングリッド */}
-          <div className="max-h-[380px] overflow-y-auto pr-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {daysList.map(day => {
-                const slot = draftSlots[day.date] || {
-                  morningStatus: 'none',
-                  morningCondition: '',
-                  afternoonStatus: 'none',
-                  afternoonCondition: '',
-                };
+          {/* カレンダー形式（日曜始まり7列）の出欠入力グリッド */}
+          <div className="space-y-3">
+            <div className="overflow-x-auto pb-1">
+              <div className="min-w-[580px] bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                {/* 曜日ヘッダー */}
+                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold">
+                  {WEEKDAYS_JA.map((dayName, idx) => {
+                    let textColor = 'text-slate-600';
+                    if (idx === 0) textColor = 'text-rose-600 bg-rose-50/50';
+                    if (idx === 6) textColor = 'text-sky-600 bg-sky-50/50';
+                    return (
+                      <div key={dayName} className={`py-2 ${textColor}`}>
+                        {dayName}
+                      </div>
+                    );
+                  })}
+                </div>
 
-                const dayEvent = events.find(e => e.date === day.date);
-
-                let badgeColor = 'text-slate-800';
-                if (day.isSunday) badgeColor = 'text-rose-600 font-bold';
-                if (day.isSaturday) badgeColor = 'text-sky-600 font-bold';
-
-                return (
-                  <div
-                    key={'input_' + day.date}
-                    className={`p-2.5 rounded-xl border transition flex flex-col justify-between space-y-1.5 ${
-                      day.isToday
-                        ? 'border-emerald-500 bg-emerald-50/30'
-                        : day.isWeekend
-                        ? 'border-slate-300 bg-slate-50/70'
-                        : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    {/* 日程ヘッダー */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-1.5">
-                        <span className={`text-sm ${badgeColor}`}>
-                          {day.dayNumber}日({day.weekday})
-                        </span>
-                        {day.isToday && (
-                          <span className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-0.2 rounded">
-                            今日
+                {/* カレンダー日付グリッド */}
+                <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100">
+                  {calendarDays.map((day) => {
+                    // 当月外のパディングセル
+                    if (!day.isCurrentMonth) {
+                      return (
+                        <div
+                          key={'pad_' + day.date}
+                          className="min-h-[86px] p-1.5 bg-slate-50/50 flex flex-col justify-between"
+                        >
+                          <span className="text-xs text-slate-300 font-medium select-none">
+                            {day.dayNumber}
                           </span>
-                        )}
-                      </div>
-                      {dayEvent && (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded truncate max-w-[120px]" title={dayEvent.location}>
-                          🏸 {dayEvent.startTime}~ {dayEvent.location}
-                        </span>
-                      )}
-                    </div>
+                        </div>
+                      );
+                    }
 
-                    {/* 午前・午後ポチポチボタン */}
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {/* 午前 */}
-                      <button
-                        type="button"
-                        onClick={() => toggleSlot(day.date, 'morning')}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition flex items-center justify-between ${
-                          slot.morningStatus === 'circle'
-                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
-                            : slot.morningStatus === 'triangle'
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-2xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    // 当月セル
+                    const [y, m, d] = day.date.split('-').map(Number);
+                    const dayOfWeek = new Date(y, m - 1, d).getDay();
+                    const isSunday = dayOfWeek === 0;
+                    const isSaturday = dayOfWeek === 6;
+
+                    const slot = draftSlots[day.date] || {
+                      morningStatus: 'none',
+                      morningCondition: '',
+                      afternoonStatus: 'none',
+                      afternoonCondition: '',
+                    };
+
+                    const dayEvent = events.find((e) => e.date === day.date);
+
+                    let dayNumberStyle = 'text-slate-700 font-semibold';
+                    if (day.isToday) {
+                      dayNumberStyle = 'bg-emerald-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs shadow-xs';
+                    } else if (isSunday) {
+                      dayNumberStyle = 'text-rose-600 font-bold';
+                    } else if (isSaturday) {
+                      dayNumberStyle = 'text-sky-600 font-bold';
+                    }
+
+                    return (
+                      <div
+                        key={'cal_input_' + day.date}
+                        className={`min-h-[86px] p-1.5 flex flex-col justify-between transition ${
+                          day.isToday
+                            ? 'bg-emerald-50/30 ring-1 ring-inset ring-emerald-400'
+                            : isSunday
+                            ? 'bg-rose-50/20'
+                            : isSaturday
+                            ? 'bg-sky-50/20'
+                            : 'bg-white'
                         }`}
                       >
-                        <span className="flex items-center space-x-0.5 text-[11px]">
-                          <Sun className="w-3 h-3 text-amber-400" />
-                          <span>午前</span>
-                        </span>
-                        <span>{slot.morningStatus === 'circle' ? '◯ 参加' : slot.morningStatus === 'triangle' ? '△' : '-'}</span>
-                      </button>
+                        {/* 日付ヘッダー */}
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs ${dayNumberStyle}`}>
+                            {day.dayNumber}
+                          </span>
+                          {dayEvent && (
+                            <span
+                              className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded truncate max-w-[55px]"
+                              title={`🏸 ${dayEvent.startTime}~ ${dayEvent.location}`}
+                            >
+                              🏸
+                            </span>
+                          )}
+                        </div>
 
-                      {/* 午後 */}
-                      <button
-                        type="button"
-                        onClick={() => toggleSlot(day.date, 'afternoon')}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition flex items-center justify-between ${
-                          slot.afternoonStatus === 'circle'
-                            ? 'bg-teal-600 border-teal-600 text-white shadow-2xs'
-                            : slot.afternoonStatus === 'triangle'
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-2xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        <span className="flex items-center space-x-0.5 text-[11px]">
-                          <Moon className="w-3 h-3 text-teal-400" />
-                          <span>午後</span>
-                        </span>
-                        <span>{slot.afternoonStatus === 'circle' ? '◯ 参加' : slot.afternoonStatus === 'triangle' ? '△' : '-'}</span>
-                      </button>
-                    </div>
+                        {/* 午前・午後トグルボタン */}
+                        <div className="space-y-1">
+                          {/* 午前ボタン */}
+                          <button
+                            type="button"
+                            onClick={() => toggleSlot(day.date, 'morning')}
+                            title="午前: タップで ◯ / △ / - を切り替え"
+                            className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
+                              slot.morningStatus === 'circle'
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : slot.morningStatus === 'triangle'
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span className="text-[10px] opacity-90">前</span>
+                            <span className="font-extrabold">
+                              {slot.morningStatus === 'circle' ? '◯' : slot.morningStatus === 'triangle' ? '△' : '-'}
+                            </span>
+                          </button>
 
-                    {/* △の場合の条件入力インライン */}
-                    {(slot.morningStatus === 'triangle' || slot.afternoonStatus === 'triangle') && (
-                      <div className="space-y-1 pt-0.5 text-[11px]">
-                        {slot.morningStatus === 'triangle' && (
-                          <input
-                            type="text"
-                            value={slot.morningCondition}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDraftSlots(prev => ({
-                                ...prev,
-                                [day.date]: { ...prev[day.date], morningCondition: val }
-                              }));
-                            }}
-                            placeholder="午前条件（例: 10:00から）*必須"
-                            className="w-full px-2 py-0.5 rounded border border-amber-300 bg-white text-[11px]"
-                          />
-                        )}
-                        {slot.afternoonStatus === 'triangle' && (
-                          <input
-                            type="text"
-                            value={slot.afternoonCondition}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDraftSlots(prev => ({
-                                ...prev,
-                                [day.date]: { ...prev[day.date], afternoonCondition: val }
-                              }));
-                            }}
-                            placeholder="午後条件（例: 15:00早退）*必須"
-                            className="w-full px-2 py-0.5 rounded border border-teal-300 bg-white text-[11px]"
-                          />
-                        )}
+                          {/* 午後ボタン */}
+                          <button
+                            type="button"
+                            onClick={() => toggleSlot(day.date, 'afternoon')}
+                            title="午後: タップで ◯ / △ / - を切り替え"
+                            className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
+                              slot.afternoonStatus === 'circle'
+                                ? 'bg-teal-600 border-teal-600 text-white'
+                                : slot.afternoonStatus === 'triangle'
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span className="text-[10px] opacity-90">後</span>
+                            <span className="font-extrabold">
+                              {slot.afternoonStatus === 'circle' ? '◯' : slot.afternoonStatus === 'triangle' ? '△' : '-'}
+                            </span>
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
+
+            {/* △（条件付き）を選択した日程の条件入力カード */}
+            {daysList.some(d => {
+              const s = draftSlots[d.date];
+              return s && (s.morningStatus === 'triangle' || s.afternoonStatus === 'triangle');
+            }) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>△（条件付き）で回答した日程の参加条件を入力してください（必須）</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                  {daysList
+                    .filter(d => {
+                      const s = draftSlots[d.date];
+                      return s && (s.morningStatus === 'triangle' || s.afternoonStatus === 'triangle');
+                    })
+                    .map(d => {
+                      const slot = draftSlots[d.date];
+                      if (!slot) return null;
+                      return (
+                        <div key={'cond_' + d.date} className="bg-white p-2.5 rounded-lg border border-amber-200 space-y-1.5 shadow-2xs">
+                          <div className="font-bold text-slate-800 flex items-center justify-between">
+                            <span>{formatDateJa(d.date)}</span>
+                          </div>
+                          {slot.morningStatus === 'triangle' && (
+                            <div>
+                              <label className="text-[11px] text-amber-800 font-semibold block mb-0.5">
+                                午前△の条件:
+                              </label>
+                              <input
+                                type="text"
+                                value={slot.morningCondition}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDraftSlots(prev => ({
+                                    ...prev,
+                                    [d.date]: { ...prev[d.date], morningCondition: val }
+                                  }));
+                                }}
+                                placeholder="例: 10:00からなら可"
+                                className="w-full px-2 py-1 rounded border border-amber-300 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                              />
+                            </div>
+                          )}
+                          {slot.afternoonStatus === 'triangle' && (
+                            <div>
+                              <label className="text-[11px] text-teal-800 font-semibold block mb-0.5">
+                                午後△の条件:
+                              </label>
+                              <input
+                                type="text"
+                                value={slot.afternoonCondition}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDraftSlots(prev => ({
+                                    ...prev,
+                                    [d.date]: { ...prev[d.date], afternoonCondition: val }
+                                  }));
+                                }}
+                                placeholder="例: 15:00早退"
+                                className="w-full px-2 py-1 rounded border border-teal-300 text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 保存ボタン */}
