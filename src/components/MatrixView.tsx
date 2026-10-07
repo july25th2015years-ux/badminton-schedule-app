@@ -112,8 +112,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     loadUserSlots(name);
   };
 
-  // スロットの切り替え（none -> circle -> triangle -> none）
+  const todayObj = new Date();
+  const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+
+  // スロットの切り替え（none -> circle -> triangle -> none）※過去日は操作不可
   const toggleSlot = (dateStr: string, slot: 'morning' | 'afternoon') => {
+    if (dateStr < todayStr) return;
+
     setDraftSlots(prev => {
       const current = prev[dateStr] || {
         morningStatus: 'none',
@@ -138,12 +143,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     });
   };
 
-  // 土日の午前・午後をすべて◯
+  // 土日の午前・午後をすべて◯（今日以降のみ）
   const handleSelectWeekends = () => {
     setDraftSlots(prev => {
       const updated = { ...prev };
       daysList.forEach(day => {
-        if (day.isWeekend) {
+        if (day.isWeekend && day.date >= todayStr) {
           updated[day.date] = {
             morningStatus: 'circle',
             morningCondition: '',
@@ -156,12 +161,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     });
   };
 
-  // 土曜の午後だけ◯
+  // 土曜の午後だけ◯（今日以降のみ）
   const handleSelectSaturdayAfternoons = () => {
     setDraftSlots(prev => {
       const updated = { ...prev };
       daysList.forEach(day => {
-        if (day.isSaturday) {
+        if (day.isSaturday && day.date >= todayStr) {
           updated[day.date] = {
             ...(updated[day.date] || { morningStatus: 'none', morningCondition: '' }),
             afternoonStatus: 'circle',
@@ -173,12 +178,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     });
   };
 
-  // 日曜の午前だけ◯
+  // 日曜の午前だけ◯（今日以降のみ）
   const handleSelectSundayMornings = () => {
     setDraftSlots(prev => {
       const updated = { ...prev };
       daysList.forEach(day => {
-        if (day.isSunday) {
+        if (day.isSunday && day.date >= todayStr) {
           updated[day.date] = {
             ...(updated[day.date] || { afternoonStatus: 'none', afternoonCondition: '' }),
             morningStatus: 'circle',
@@ -190,32 +195,40 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
     });
   };
 
-  // 全日終日◯
+  // 全日終日◯（今日以降のみ）
   const handleSelectAllFullDay = () => {
-    const slots: { [dateStr: string]: DraftSlot } = {};
-    daysList.forEach(day => {
-      slots[day.date] = {
-        morningStatus: 'circle',
-        morningCondition: '',
-        afternoonStatus: 'circle',
-        afternoonCondition: '',
-      };
+    setDraftSlots(prev => {
+      const updated = { ...prev };
+      daysList.forEach(day => {
+        if (day.date >= todayStr) {
+          updated[day.date] = {
+            morningStatus: 'circle',
+            morningCondition: '',
+            afternoonStatus: 'circle',
+            afternoonCondition: '',
+          };
+        }
+      });
+      return updated;
     });
-    setDraftSlots(slots);
   };
 
-  // クリア
+  // クリア（今日以降のみ）
   const handleClearAll = () => {
-    const slots: { [dateStr: string]: DraftSlot } = {};
-    daysList.forEach(day => {
-      slots[day.date] = {
-        morningStatus: 'none',
-        morningCondition: '',
-        afternoonStatus: 'none',
-        afternoonCondition: '',
-      };
+    setDraftSlots(prev => {
+      const updated = { ...prev };
+      daysList.forEach(day => {
+        if (day.date >= todayStr) {
+          updated[day.date] = {
+            morningStatus: 'none',
+            morningCondition: '',
+            afternoonStatus: 'none',
+            afternoonCondition: '',
+          };
+        }
+      });
+      return updated;
     });
-    setDraftSlots(slots);
   };
 
   // 一括保存
@@ -377,13 +390,13 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
           {/* カレンダー形式（日曜始まり7列）の出欠入力グリッド */}
           <div className="space-y-3">
             <div className="overflow-x-auto pb-1">
-              <div className="min-w-[580px] bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
-                {/* 曜日ヘッダー */}
-                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold">
+              <div className="min-w-[620px] bg-white rounded-xl border-2 border-slate-400 overflow-hidden shadow-xs">
+                {/* 曜日ヘッダー（境界線をはっきり濃く） */}
+                <div className="grid grid-cols-7 border-b-2 border-slate-400 bg-slate-200 divide-x divide-slate-400 text-center text-xs font-bold">
                   {WEEKDAYS_JA.map((dayName, idx) => {
-                    let textColor = 'text-slate-600';
-                    if (idx === 0) textColor = 'text-rose-600 bg-rose-50/50';
-                    if (idx === 6) textColor = 'text-sky-600 bg-sky-50/50';
+                    let textColor = 'text-slate-800';
+                    if (idx === 0) textColor = 'text-rose-600 bg-rose-100/50';
+                    if (idx === 6) textColor = 'text-sky-600 bg-sky-100/50';
                     return (
                       <div key={dayName} className={`py-2 ${textColor}`}>
                         {dayName}
@@ -392,17 +405,17 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                   })}
                 </div>
 
-                {/* カレンダー日付グリッド */}
-                <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100">
+                {/* カレンダー日付グリッド（縦線・横線をはっきり濃く） */}
+                <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-400">
                   {calendarDays.map((day) => {
                     // 当月外のパディングセル
                     if (!day.isCurrentMonth) {
                       return (
                         <div
                           key={'pad_' + day.date}
-                          className="min-h-[86px] p-1.5 bg-slate-50/50 flex flex-col justify-between"
+                          className="min-h-[92px] p-1.5 bg-slate-100/60 flex flex-col justify-between"
                         >
-                          <span className="text-xs text-slate-300 font-medium select-none">
+                          <span className="text-xs text-slate-400 font-medium select-none">
                             {day.dayNumber}
                           </span>
                         </div>
@@ -414,6 +427,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                     const dayOfWeek = new Date(y, m - 1, d).getDay();
                     const isSunday = dayOfWeek === 0;
                     const isSaturday = dayOfWeek === 6;
+                    const isPast = day.date < todayStr; // 過去日付の判定
 
                     const slot = draftSlots[day.date] || {
                       morningStatus: 'none',
@@ -424,8 +438,10 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
                     const dayEvent = events.find((e) => e.date === day.date);
 
-                    let dayNumberStyle = 'text-slate-700 font-semibold';
-                    if (day.isToday) {
+                    let dayNumberStyle = 'text-slate-800 font-semibold';
+                    if (isPast) {
+                      dayNumberStyle = 'text-slate-400 font-normal';
+                    } else if (day.isToday) {
                       dayNumberStyle = 'bg-emerald-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs shadow-xs';
                     } else if (isSunday) {
                       dayNumberStyle = 'text-rose-600 font-bold';
@@ -433,47 +449,60 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                       dayNumberStyle = 'text-sky-600 font-bold';
                     }
 
+                    let cellBg = 'bg-white';
+                    if (isPast) {
+                      cellBg = 'bg-slate-100/80';
+                    } else if (day.isToday) {
+                      cellBg = 'bg-emerald-50/40 ring-1 ring-inset ring-emerald-400';
+                    } else if (isSunday) {
+                      cellBg = 'bg-rose-50/20';
+                    } else if (isSaturday) {
+                      cellBg = 'bg-sky-50/20';
+                    }
+
                     return (
                       <div
                         key={'cal_input_' + day.date}
-                        className={`min-h-[86px] p-1.5 flex flex-col justify-between transition ${
-                          day.isToday
-                            ? 'bg-emerald-50/30 ring-1 ring-inset ring-emerald-400'
-                            : isSunday
-                            ? 'bg-rose-50/20'
-                            : isSaturday
-                            ? 'bg-sky-50/20'
-                            : 'bg-white'
-                        }`}
+                        className={`min-h-[92px] p-1.5 flex flex-col justify-between transition ${cellBg}`}
                       >
                         {/* 日付ヘッダー */}
                         <div className="flex items-center justify-between mb-1">
                           <span className={`text-xs ${dayNumberStyle}`}>
                             {day.dayNumber}
                           </span>
-                          {dayEvent && (
-                            <span
-                              className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded truncate max-w-[55px]"
-                              title={`🏸 ${dayEvent.startTime}~ ${dayEvent.location}`}
-                            >
-                              🏸
-                            </span>
-                          )}
+                          <div className="flex items-center space-x-1">
+                            {isPast && (
+                              <span className="text-[9px] text-slate-400 bg-slate-200/80 px-1 py-0.2 rounded font-medium">
+                                過去
+                              </span>
+                            )}
+                            {dayEvent && (
+                              <span
+                                className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded truncate max-w-[55px]"
+                                title={`🏸 ${dayEvent.startTime}~ ${dayEvent.location}`}
+                              >
+                                🏸
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* 午前・午後トグルボタン */}
+                        {/* 午前・午後トグルボタン ＆ セル内条件表示 */}
                         <div className="space-y-1">
                           {/* 午前ボタン */}
                           <button
                             type="button"
+                            disabled={isPast}
                             onClick={() => toggleSlot(day.date, 'morning')}
-                            title="午前: タップで ◯ / △ / - を切り替え"
+                            title={isPast ? '過去の日付は入力できません' : '午前: タップで ◯ / △ / - を切り替え'}
                             className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
-                              slot.morningStatus === 'circle'
+                              isPast
+                                ? 'bg-slate-200/60 border-slate-300 text-slate-400 cursor-not-allowed opacity-60'
+                                : slot.morningStatus === 'circle'
                                 ? 'bg-emerald-600 border-emerald-600 text-white'
                                 : slot.morningStatus === 'triangle'
                                 ? 'bg-amber-500 border-amber-500 text-white'
-                                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
                             }`}
                           >
                             <span className="text-[10px] opacity-90">前</span>
@@ -482,61 +511,9 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                             </span>
                           </button>
 
-                          {/* 午後ボタン */}
-                          <button
-                            type="button"
-                            onClick={() => toggleSlot(day.date, 'afternoon')}
-                            title="午後: タップで ◯ / △ / - を切り替え"
-                            className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
-                              slot.afternoonStatus === 'circle'
-                                ? 'bg-teal-600 border-teal-600 text-white'
-                                : slot.afternoonStatus === 'triangle'
-                                ? 'bg-amber-500 border-amber-500 text-white'
-                                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                            }`}
-                          >
-                            <span className="text-[10px] opacity-90">後</span>
-                            <span className="font-extrabold">
-                              {slot.afternoonStatus === 'circle' ? '◯' : slot.afternoonStatus === 'triangle' ? '△' : '-'}
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* △（条件付き）を選択した日程の条件入力カード */}
-            {daysList.some(d => {
-              const s = draftSlots[d.date];
-              return s && (s.morningStatus === 'triangle' || s.afternoonStatus === 'triangle');
-            }) && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-900">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>△（条件付き）で回答した日程の参加条件を入力してください（必須）</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-                  {daysList
-                    .filter(d => {
-                      const s = draftSlots[d.date];
-                      return s && (s.morningStatus === 'triangle' || s.afternoonStatus === 'triangle');
-                    })
-                    .map(d => {
-                      const slot = draftSlots[d.date];
-                      if (!slot) return null;
-                      return (
-                        <div key={'cond_' + d.date} className="bg-white p-2.5 rounded-lg border border-amber-200 space-y-1.5 shadow-2xs">
-                          <div className="font-bold text-slate-800 flex items-center justify-between">
-                            <span>{formatDateJa(d.date)}</span>
-                          </div>
-                          {slot.morningStatus === 'triangle' && (
-                            <div>
-                              <label className="text-[11px] text-amber-800 font-semibold block mb-0.5">
-                                午前△の条件:
-                              </label>
+                          {/* 午前△のセル内条件表示・入力 */}
+                          {!isPast && slot.morningStatus === 'triangle' && (
+                            <div className="pt-0.5">
                               <input
                                 type="text"
                                 value={slot.morningCondition}
@@ -544,19 +521,41 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                                   const val = e.target.value;
                                   setDraftSlots(prev => ({
                                     ...prev,
-                                    [d.date]: { ...prev[d.date], morningCondition: val }
+                                    [day.date]: { ...prev[day.date], morningCondition: val }
                                   }));
                                 }}
-                                placeholder="例: 10:00からなら可"
-                                className="w-full px-2 py-1 rounded border border-amber-300 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                placeholder="午前△の条件"
+                                title="午前の参加条件を入力してください"
+                                className="w-full px-1 py-0.5 rounded border border-amber-400 bg-amber-50 text-[10px] text-amber-950 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                               />
                             </div>
                           )}
-                          {slot.afternoonStatus === 'triangle' && (
-                            <div>
-                              <label className="text-[11px] text-teal-800 font-semibold block mb-0.5">
-                                午後△の条件:
-                              </label>
+
+                          {/* 午後ボタン */}
+                          <button
+                            type="button"
+                            disabled={isPast}
+                            onClick={() => toggleSlot(day.date, 'afternoon')}
+                            title={isPast ? '過去の日付は入力できません' : '午後: タップで ◯ / △ / - を切り替え'}
+                            className={`w-full py-1 px-1 rounded text-[11px] font-bold border transition flex items-center justify-between shadow-2xs ${
+                              isPast
+                                ? 'bg-slate-200/60 border-slate-300 text-slate-400 cursor-not-allowed opacity-60'
+                                : slot.afternoonStatus === 'circle'
+                                ? 'bg-teal-600 border-teal-600 text-white'
+                                : slot.afternoonStatus === 'triangle'
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span className="text-[10px] opacity-90">後</span>
+                            <span className="font-extrabold">
+                              {slot.afternoonStatus === 'circle' ? '◯' : slot.afternoonStatus === 'triangle' ? '△' : '-'}
+                            </span>
+                          </button>
+
+                          {/* 午後△のセル内条件表示・入力 */}
+                          {!isPast && slot.afternoonStatus === 'triangle' && (
+                            <div className="pt-0.5">
                               <input
                                 type="text"
                                 value={slot.afternoonCondition}
@@ -564,20 +563,22 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                                   const val = e.target.value;
                                   setDraftSlots(prev => ({
                                     ...prev,
-                                    [d.date]: { ...prev[d.date], afternoonCondition: val }
+                                    [day.date]: { ...prev[day.date], afternoonCondition: val }
                                   }));
                                 }}
-                                placeholder="例: 15:00早退"
-                                className="w-full px-2 py-1 rounded border border-teal-300 text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                                placeholder="午後△の条件"
+                                title="午後の参加条件を入力してください"
+                                className="w-full px-1 py-0.5 rounded border border-teal-400 bg-teal-50 text-[10px] text-teal-950 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
                               />
                             </div>
                           )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* 保存ボタン */}
@@ -770,39 +771,63 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                       return (
                         <td
                           key={name}
-                          className="py-2.5 px-2 text-center border-l border-slate-100"
+                          className="py-2 px-1.5 text-center border-l border-slate-200"
                         >
                           {mStatus === 'none' && aStatus === 'none' ? (
                             <span className="text-slate-300">-</span>
                           ) : (
-                            <div className="flex items-center justify-center space-x-1">
-                              {/* 午前バッジ */}
-                              <span
-                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  mStatus === 'circle'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : mStatus === 'triangle'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'text-slate-300'
-                                }`}
-                                title={mCond ? `午前: ${mCond}` : undefined}
-                              >
-                                前:{mStatus === 'circle' ? '◯' : mStatus === 'triangle' ? '△' : '-'}
-                              </span>
+                            <div className="flex flex-col items-center justify-center space-y-1">
+                              <div className="flex items-center justify-center space-x-1">
+                                {/* 午前バッジ */}
+                                <span
+                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    mStatus === 'circle'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : mStatus === 'triangle'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'text-slate-300'
+                                  }`}
+                                  title={mCond ? `午前: ${mCond}` : undefined}
+                                >
+                                  前:{mStatus === 'circle' ? '◯' : mStatus === 'triangle' ? '△' : '-'}
+                                </span>
 
-                              {/* 午後バッジ */}
-                              <span
-                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  aStatus === 'circle'
-                                    ? 'bg-teal-100 text-teal-800'
-                                    : aStatus === 'triangle'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'text-slate-300'
-                                }`}
-                                title={aCond ? `午後: ${aCond}` : undefined}
-                              >
-                                後:{aStatus === 'circle' ? '◯' : aStatus === 'triangle' ? '△' : '-'}
-                              </span>
+                                {/* 午後バッジ */}
+                                <span
+                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    aStatus === 'circle'
+                                      ? 'bg-teal-100 text-teal-800'
+                                      : aStatus === 'triangle'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'text-slate-300'
+                                  }`}
+                                  title={aCond ? `午後: ${aCond}` : undefined}
+                                >
+                                  後:{aStatus === 'circle' ? '◯' : aStatus === 'triangle' ? '△' : '-'}
+                                </span>
+                              </div>
+
+                              {/* △の条件テキスト表示 */}
+                              {(mCond || aCond) && (
+                                <div className="space-y-0.5 w-full">
+                                  {mCond && (
+                                    <div
+                                      className="text-[9px] text-amber-900 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded truncate max-w-[85px] mx-auto"
+                                      title={`午前: ${mCond}`}
+                                    >
+                                      前:{mCond}
+                                    </div>
+                                  )}
+                                  {aCond && (
+                                    <div
+                                      className="text-[9px] text-teal-900 bg-teal-50 border border-teal-200 px-1 py-0.2 rounded truncate max-w-[85px] mx-auto"
+                                      title={`午後: ${aCond}`}
+                                    >
+                                      後:{aCond}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </td>

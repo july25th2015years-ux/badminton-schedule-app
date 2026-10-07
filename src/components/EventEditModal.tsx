@@ -6,6 +6,19 @@ import { saveEvent } from '../services/storage';
 export const DEFAULT_LOCATION = 'スポーツパーク川副';
 export const DEFAULT_MAP_URL = 'https://maps.app.goo.gl/n3ZRedeMvSsXP6Lm6';
 
+// 9:00〜17:00までの30分刻みオプション
+export const TIME_OPTIONS = [
+  '09:00', '09:30',
+  '10:00', '10:30',
+  '11:00', '11:30',
+  '12:00', '12:30',
+  '13:00', '13:30',
+  '14:00', '14:30',
+  '15:00', '15:30',
+  '16:00', '16:30',
+  '17:00'
+];
+
 interface EventEditModalProps {
   isOpen: boolean;
   initialDate?: string;
@@ -26,8 +39,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [date, setDate] = useState(initialDate || todayStr);
-  const [startTime, setStartTime] = useState('19:00');
-  const [endTime, setEndTime] = useState('21:00');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('12:00');
 
   // 開催場所の選択肢（'kawaso': スポーツパーク川副, 'other': その他・直接入力）
   const [locationType, setLocationType] = useState<'kawaso' | 'other'>('kawaso');
@@ -58,8 +71,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
       }
     } else {
       setDate(initialDate || todayStr);
-      setStartTime('19:00');
-      setEndTime('21:00');
+      setStartTime('09:00');
+      setEndTime('12:00');
       setLocationType('kawaso');
       setCustomLocation('');
       setCustomMapUrl('');
@@ -162,7 +175,7 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
             />
           </div>
 
-          {/* 時間帯 */}
+          {/* 時間帯（30分刻み 9:00〜17:00） */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -170,13 +183,21 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
               </label>
               <div className="flex items-center">
                 <Clock className="w-4 h-4 text-slate-400 mr-1.5 shrink-0" />
-                <input
-                  type="time"
+                <select
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   required
-                  className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+                  className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {!TIME_OPTIONS.includes(startTime) && (
+                    <option value={startTime}>{startTime}</option>
+                  )}
+                  {TIME_OPTIONS.map((t) => (
+                    <option key={'start_' + t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div>
@@ -185,13 +206,21 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
               </label>
               <div className="flex items-center">
                 <Clock className="w-4 h-4 text-slate-400 mr-1.5 shrink-0" />
-                <input
-                  type="time"
+                <select
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
                   required
-                  className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+                  className="w-full text-sm px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {!TIME_OPTIONS.includes(endTime) && (
+                    <option value={endTime}>{endTime}</option>
+                  )}
+                  {TIME_OPTIONS.map((t) => (
+                    <option key={'end_' + t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
