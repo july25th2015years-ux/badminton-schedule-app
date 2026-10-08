@@ -19,6 +19,44 @@ export const TIME_OPTIONS = [
   '17:00'
 ];
 
+/**
+ * 既存のコート情報文字列（例: "2面　AB", "1面 E", "2面"）から
+ * 面数（数字）とコート名（記号等）を抽出する
+ */
+export function parseCourtCount(raw?: string): { count: string; court: string } {
+  if (!raw) return { count: '', court: '' };
+  const str = raw.trim();
+  const match = str.match(/^(\d+)\s*面(?:\s*[\s,、　]\s*(.*))?$/);
+  if (match) {
+    return {
+      count: match[1] || '',
+      court: (match[2] || '').trim(),
+    };
+  }
+  if (/^\d+$/.test(str)) {
+    return { count: str, court: '' };
+  }
+  return { count: '', court: str };
+}
+
+/**
+ * 入力された面数とコート名から保存用文字列を生成
+ */
+export function formatCourtCount(count: string, court: string): string {
+  const c = count.trim();
+  const name = court.trim();
+  if (c && name) {
+    return `${c}面　${name}`;
+  }
+  if (c) {
+    return `${c}面`;
+  }
+  if (name) {
+    return name;
+  }
+  return '';
+}
+
 interface EventEditModalProps {
   isOpen: boolean;
   initialDate?: string;
@@ -53,7 +91,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
   const [newLocMapUrl, setNewLocMapUrl] = useState('');
   const [isSavingLoc, setIsSavingLoc] = useState(false);
 
-  const [courtCount, setCourtCount] = useState('2面');
+  const [courtNumber, setCourtNumber] = useState('2');
+  const [courtName, setCourtName] = useState('');
   const [notes, setNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,7 +111,9 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
       setDate(editingEvent.date);
       setStartTime(editingEvent.startTime);
       setEndTime(editingEvent.endTime);
-      setCourtCount(editingEvent.courtCount || '');
+      const parsedCourt = parseCourtCount(editingEvent.courtCount);
+      setCourtNumber(parsedCourt.count);
+      setCourtName(parsedCourt.court);
       setNotes(editingEvent.notes || '');
 
       // 編集中の場所がプリセットにあるか照合
@@ -94,7 +135,8 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
       setSelectedPresetId(defaultPreset ? defaultPreset.id : 'loc_kawaso');
       setCustomLocation('');
       setCustomMapUrl('');
-      setCourtCount('2面');
+      setCourtNumber('2');
+      setCourtName('');
       setNotes('');
     }
     setIsAddingLocation(false);
@@ -209,7 +251,7 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
         endTime,
         location: finalLocation,
         mapUrl: finalMapUrl,
-        courtCount: courtCount.trim() || undefined,
+        courtCount: formatCourtCount(courtNumber, courtName) || undefined,
         notes: notes.trim() || undefined,
       }, editingEvent?.id);
 
@@ -514,18 +556,57 @@ export const EventEditModal: React.FC<EventEditModalProps> = ({
             </div>
           )}
 
-          {/* コート面数 */}
+          {/* コート数・コート記号 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              コート面数・枠（任意）
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              コート情報（任意）
             </label>
-            <input
-              type="text"
-              value={courtCount}
-              onChange={(e) => setCourtCount(e.target.value)}
-              placeholder="例: 2面、第3コート"
-              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
+            <div className="bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+                {/* コート数 "数字を入力" 面 */}
+                <div className="flex items-center space-x-1.5 shrink-0">
+                  <span className="text-xs font-bold text-slate-700 shrink-0">コート数</span>
+                  <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 w-20">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={courtNumber}
+                      onChange={(e) => setCourtNumber(e.target.value)}
+                      placeholder="数字"
+                      className="w-full text-center text-sm font-bold text-slate-800 bg-transparent focus:outline-none"
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-slate-700 shrink-0">面</span>
+                </div>
+
+                <span className="hidden sm:inline text-slate-300 font-light">|</span>
+
+                {/* コート "A,Bなど" */}
+                <div className="flex items-center space-x-1.5 flex-1 min-w-[150px]">
+                  <span className="text-xs font-bold text-slate-700 shrink-0">コート</span>
+                  <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 w-full">
+                    <input
+                      type="text"
+                      value={courtName}
+                      onChange={(e) => setCourtName(e.target.value)}
+                      placeholder="A,Bなど"
+                      className="w-full text-sm text-slate-800 bg-transparent focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* プレビュー表示 */}
+              {(courtNumber.trim() || courtName.trim()) && (
+                <div className="pt-1.5 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>表示プレビュー:</span>
+                  <span className="font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded">
+                    {formatCourtCount(courtNumber, courtName)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* メモ・備考 */}
