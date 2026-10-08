@@ -88,8 +88,8 @@ export const App: React.FC = () => {
   };
 
   // 練習日の削除
-  const handleDeleteEvent = async (eventId: string) => {
-    await deleteEvent(eventId);
+  const handleDeleteEvent = async (eventId: string, eventDate?: string) => {
+    await deleteEvent(eventId, eventDate);
     if (selectedEventId === eventId) {
       setSelectedEventId(null);
     }

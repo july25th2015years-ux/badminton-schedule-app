@@ -7,7 +7,8 @@ import {
   writeBatch,
   query,
   where,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 import type { PracticeEvent, Attendance, SlotStatus, MonthlyNote, LocationPreset } from '../types';
@@ -379,28 +380,83 @@ export async function saveEvent(eventData: Omit<PracticeEvent, 'id' | 'createdAt
 }
 
 /**
- * 練習会イベントの削除（関連出欠も削除）
+ * 練習会イベントの削除
+ * ※個人の出欠一覧の回答は削除せず、開催日（eventDate）に引き継いで維持する
  */
-export async function deleteEvent(eventId: string): Promise<void> {
+export async function deleteEvent(eventId: string, eventDateParam?: string): Promise<void> {
   if (isFirebaseConfigured && db) {
-    const docRef = doc(db, 'events', eventId);
+    const firestore = db;
+    const docRef = doc(firestore, 'events', eventId);
+    let eventDate = eventDateParam;
+    if (!eventDate) {
+      try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          eventDate = snap.data()?.date;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch event date before deletion:', err);
+      }
+    }
+
+    // イベント情報のみを削除
     await deleteDoc(docRef);
 
-    // 関連する出席データも削除
-    const attQuery = query(collection(db, 'attendances'), where('eventId', '==', eventId));
-    const attSnap = await getDocs(attQuery);
-    const batch = writeBatch(db);
-    attSnap.forEach(d => batch.delete(d.ref));
-    await batch.commit();
+    // 個人の出欠予定は絶対に削除しない！
+    // 該当イベントに紐づく出欠がある場合は、開催日（eventDate）に引き継ぎ・付け替え
+    if (eventDate) {
+      try {
+        const attQuery = query(collection(firestore, 'attendances'), where('eventId', '==', eventId));
+        const attSnap = await getDocs(attQuery);
+        if (!attSnap.empty) {
+          const batch = writeBatch(firestore);
+          attSnap.forEach(d => {
+            const data = d.data() as Attendance;
+            const newId = `${eventDate}_${data.userName.trim()}`;
+            const newDocRef = doc(firestore, 'attendances', newId);
+            batch.set(newDocRef, cleanForFirestore({
+              ...data,
+              id: newId,
+              eventId: eventDate,
+              updatedAt: new Date().toISOString()
+            }), { merge: true });
+
+            if (d.id !== newId) {
+              batch.delete(d.ref);
+            }
+          });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.error('Failed to migrate attendances to date on event delete:', err);
+      }
+    }
     return;
   }
 
-  // LocalStorage
-  const events = getLocalEvents().filter(e => e.id !== eventId);
+  // LocalStorage モード
+  const localEvents = getLocalEvents();
+  const targetEvent = localEvents.find(e => e.id === eventId);
+  const eventDate = eventDateParam || targetEvent?.date;
+
+  // イベント情報のみを削除
+  const events = localEvents.filter(e => e.id !== eventId);
   localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
 
-  const attendances = getLocalAttendances().filter(a => a.eventId !== eventId);
-  localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attendances));
+  // 個人の出欠予定は削除せず維持（eventId を eventDate に更新）
+  const localAttendances = getLocalAttendances();
+  const updatedAttendances = localAttendances.map(a => {
+    if (a.eventId === eventId && eventDate) {
+      return {
+        ...a,
+        id: `${eventDate}_${a.userName.trim()}`,
+        eventId: eventDate,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return a;
+  });
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(updatedAttendances));
 
   emitSync();
 }
@@ -514,8 +570,9 @@ export async function saveUserMonthBulkAttendances(
   targetDays.forEach(day => {
     const slot = slotsMap[day.date];
     if (slot && (slot.morningStatus !== 'none' || slot.afternoonStatus !== 'none')) {
-      const ev = events.find(e => e.date === day.date);
-      const targetId = ev ? ev.id : day.date;
+      // 出欠は練習会の有無に関わらず、日付（day.date）に紐づけて保存
+      // これにより、練習会が追加・削除・変更されても個人の予定が影響を受けない
+      const targetId = day.date;
       const id = `${targetId}_${trimmedName}`;
       validAttendances.push({
         id,

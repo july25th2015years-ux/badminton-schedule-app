@@ -25,7 +25,7 @@ interface EventDetailModalProps {
   attendances: Attendance[];
   onClose: () => void;
   onEditEvent: (event: PracticeEvent) => void;
-  onDeleteEvent: (eventId: string) => void;
+  onDeleteEvent: (eventId: string, eventDate?: string) => void;
 }
 
 export const EventDetailModal: React.FC<EventDetailModalProps> = ({
@@ -149,11 +149,14 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </button>
               {isConfirmingDelete ? (
                 <div className="flex items-center space-x-1.5 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg animate-in fade-in">
-                  <span className="text-[11px] text-rose-700 font-bold">本当に削除しますか？</span>
+                  <div className="flex flex-col">
+                    <span className="text-[11px] text-rose-700 font-bold">練習会予定を削除しますか？</span>
+                    <span className="text-[10px] text-rose-600 font-medium">※出欠一覧の個人の予定は保持されます</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
-                      onDeleteEvent(event.id);
+                      onDeleteEvent(event.id, event.date);
                       onClose();
                     }}
                     className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded shadow-2xs transition"
