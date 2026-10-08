@@ -289,7 +289,25 @@ export function getDateAttendanceStats(
 export type EventTimeSlot = 'morning' | 'afternoon' | 'allDay';
 
 /**
+ * ヨッシーの表記ゆれ判定
+ */
+export function isYosshyName(name: string): boolean {
+  const norm = name.trim().toLowerCase();
+  return norm === 'ヨッシー' || norm === 'よっしー' || norm === 'yosshy' || norm === 'yossy';
+}
+
+/**
+ * 午前または午後枠が「ヨッシー + 他2名以上（計3名以上）」の開催成立条件を満たしているか判定
+ */
+export function isSlotQualifiedWithYosshy(attendees: AttendeeDetail[]): boolean {
+  const hasYosshy = attendees.some(a => isYosshyName(a.userName));
+  const otherCount = attendees.filter(a => !isYosshyName(a.userName)).length;
+  return hasYosshy && otherCount >= 2;
+}
+
+/**
  * 開催時間（HH:mm）から午前・午後・終日（跨ぎ）を判定
+ * 10:00〜13:00などの枠は明確に午前（morning）と判定する
  */
 export function getEventTimeSlot(startTime?: string, endTime?: string): EventTimeSlot {
   if (!startTime) return 'allDay';
@@ -301,17 +319,31 @@ export function getEventTimeSlot(startTime?: string, endTime?: string): EventTim
   const endMin = endTime ? parseInt(endTime.split(':')[1] || '0', 10) || 0 : 0;
   const endTotalMin = endHour * 60 + endMin;
 
-  // 終了時間が12:30以下なら午前中開催
-  if (endTotalMin <= 12 * 60 + 30) {
+  // 1. 終了時間が13:00以下なら完全午前中開催（例: 09:00〜12:00, 10:00〜13:00など）
+  if (endTotalMin <= 13 * 60) {
     return 'morning';
   }
 
-  // 開始時間が12:00以降なら午後開催
-  if (startTotalMin >= 12 * 60) {
+  // 2. 開始時間が12:30以降なら午後開催（例: 13:00〜17:00, 18:00〜21:00など）
+  if (startTotalMin >= 12 * 60 + 30) {
     return 'afternoon';
   }
 
-  // 午前から始まり午後まで跨ぐ場合
+  // 3. 午前から始まり午後まで跨ぐ場合（例: 10:00〜14:00, 09:00〜17:00など）
+  // 午前時間帯（〜13:00）と午後時間帯（13:00〜）の時間を比較
+  const morningMinutes = Math.max(0, Math.min(endTotalMin, 13 * 60) - startTotalMin);
+  const afternoonMinutes = Math.max(0, endTotalMin - Math.max(startTotalMin, 13 * 60));
+
+  // 午前の割合が圧倒的に多ければ（午後の2倍以上）午前開催とみなす（例: 10:00〜14:00は午前3h・午後1h）
+  if (morningMinutes >= afternoonMinutes * 2) {
+    return 'morning';
+  }
+  // 午後の割合が圧倒的に多ければ午後開催とみなす（例: 12:00〜16:00は午前1h・午後3h）
+  if (afternoonMinutes >= morningMinutes * 2) {
+    return 'afternoon';
+  }
+
+  // 朝から夕方まで終日跨ぐ場合（例: 09:00〜17:00）
   return 'allDay';
 }
 

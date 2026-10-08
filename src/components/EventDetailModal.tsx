@@ -4,7 +4,8 @@ import {
   formatDateJa,
   getGoogleMapsUrl,
   getEventAttendanceStats,
-  getEventTimeSlot
+  getEventTimeSlot,
+  isSlotQualifiedWithYosshy
 } from '../utils/helpers';
 import {
   X,
@@ -39,7 +40,20 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
   // 出欠一覧カレンダーの回答（eventId & event.date の両方）から自動的に参加メンバーを集計
   const stats = getEventAttendanceStats(attendances, event.id, event.date);
-  const timeSlot = getEventTimeSlot(event.startTime, event.endTime);
+  let timeSlot = getEventTimeSlot(event.startTime, event.endTime);
+
+  // 跨ぎ開催の場合でも、ヨッシー条件（ヨッシー+他2名以上）を満たす枠のみに絞り込む
+  if (timeSlot === 'allDay') {
+    const isMorningQualified = isSlotQualifiedWithYosshy(stats.morningAttendees);
+    const isAfternoonQualified = isSlotQualifiedWithYosshy(stats.afternoonAttendees);
+
+    if (isMorningQualified && !isAfternoonQualified) {
+      timeSlot = 'morning';
+    } else if (!isMorningQualified && isAfternoonQualified) {
+      timeSlot = 'afternoon';
+    }
+  }
+
   const mapUrl = getGoogleMapsUrl(event.location, event.mapUrl);
 
   const attendeeCount =

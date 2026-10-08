@@ -5,7 +5,8 @@ import {
   getGoogleMapsUrl,
   getEventAttendanceStats,
   getNextUpcomingEvent,
-  getEventTimeSlot
+  getEventTimeSlot,
+  isSlotQualifiedWithYosshy
 } from '../utils/helpers';
 import { Clock, MapPin, ExternalLink, Calendar, Plus, ChevronRight, UserCheck } from 'lucide-react';
 
@@ -48,7 +49,20 @@ export const NextEventBanner: React.FC<NextEventBannerProps> = ({
   }
 
   const stats = getEventAttendanceStats(attendances, nextEvent.id, nextEvent.date);
-  const timeSlot = getEventTimeSlot(nextEvent.startTime, nextEvent.endTime);
+  let timeSlot = getEventTimeSlot(nextEvent.startTime, nextEvent.endTime);
+
+  // 跨ぎ開催の場合でも、ヨッシー条件（ヨッシー+他2名以上）を満たす枠のみに絞り込む
+  if (timeSlot === 'allDay') {
+    const isMorningQualified = isSlotQualifiedWithYosshy(stats.morningAttendees);
+    const isAfternoonQualified = isSlotQualifiedWithYosshy(stats.afternoonAttendees);
+
+    if (isMorningQualified && !isAfternoonQualified) {
+      timeSlot = 'morning';
+    } else if (!isMorningQualified && isAfternoonQualified) {
+      timeSlot = 'afternoon';
+    }
+  }
+
   const mapUrl = getGoogleMapsUrl(nextEvent.location, nextEvent.mapUrl);
 
   const attendeeCount =
